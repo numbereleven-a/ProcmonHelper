@@ -1,0 +1,24 @@
+name: windows
+on:
+  push:
+  pull_request:
+jobs:
+  build-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - run: dotnet restore ProcmonHelper.sln
+      - run: dotnet build ProcmonHelper.sln -c Release --no-restore
+      - run: dotnet test ProcmonHelper.sln -c Release --no-build --collect:"XPlat Code Coverage" --results-directory TestResults
+      - run: dotnet publish src/ProcmonHelper.App/ProcmonHelper.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o artifacts/win-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ProcmonHelper-win-x64
+          path: artifacts/win-x64/ProcmonHelper.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test-results-and-coverage
+          path: TestResults

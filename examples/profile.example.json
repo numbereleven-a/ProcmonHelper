@@ -1,0 +1,32 @@
+{
+  "SchemaVersion": 1,
+  "Name": "Example",
+  "Language": 0,
+  "ProcmonPath": "",
+  "TargetPath": "",
+  "TargetArguments": "",
+  "WorkingDirectory": "",
+  "RunTargetElevated": false,
+  "FilterMode": 0,
+  "PmcPath": "",
+  "Processes": [],
+  "Stop": {
+    "StopAfterTargetExit": true,
+    "TargetExitDelay": "00:00:00",
+    "MaximumDuration": null,
+    "MaximumPmlBytes": 2147483648,
+    "MinimumFreeBytes": 1073741824
+  },
+  "Formats": 1,
+  "LocalDirectory": "",
+  "DestinationDirectory": "",
+  "DestinationIsNetwork": false,
+  "FileNameTemplate": "{AppName}_{ComputerName}_{DateTime}",
+  "OverwriteExisting": false,
+  "DeleteLocalAfterCopy": false,
+  "Topmost": false,
+  "AutoIncludeTargetProcess": true,
+  "ExcludeHelper": true,
+  "ExcludeProcmon": false,
+  "MinimizeToTray": false
+}

@@ -1,0 +1,34 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\ProcmonHelper.Contracts\ProcmonHelper.Contracts.csproj" />
+    <ProjectReference Include="..\ProcmonHelper.Core\ProcmonHelper.Core.csproj" />
+    <ProjectReference Include="..\ProcmonHelper.Infrastructure\ProcmonHelper.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PlatformTarget>x64</PlatformTarget>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\ProcmonHelper.ico</ApplicationIcon>
+    <AssemblyName>ProcmonHelper</AssemblyName>
+    <RootNamespace>ProcmonHelper.App</RootNamespace>
+    <Version>1.0</Version>
+    <FileVersion>1.0.0.0</FileVersion>
+    <AssemblyVersion>1.0.0.0</AssemblyVersion>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\ProcmonHelper.ico" />
+  </ItemGroup>
+
+</Project>

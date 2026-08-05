@@ -1,0 +1,15 @@
+<Project>
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <TreatWarningsAsErrors Condition="'$(CI)' == 'true'">true</TreatWarningsAsErrors>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <DebugType Condition="'$(Configuration)' == 'Release'">embedded</DebugType>
+    <DebugSymbols Condition="'$(Configuration)' == 'Release'">true</DebugSymbols>
+    <PathMap Condition="'$(Configuration)' == 'Release'">$(MSBuildProjectDirectory)=.</PathMap>
+    <!-- Instance service APIs are intentionally injectable; xUnit test names intentionally favor readability. -->
+    <NoWarn>$(NoWarn);CA1822;CA1707;CA1861</NoWarn>
+  </PropertyGroup>
+</Project>
