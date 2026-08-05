@@ -48,7 +48,7 @@ public partial class App : System.Windows.Application
     private static string GetArg(string[] args, string name)
     {
         var index = args.ToList().FindIndex(x => string.Equals(x, name, StringComparison.OrdinalIgnoreCase));
-        if (index < 0 || index + 1 >= args.Count) throw new ArgumentException($"Missing argument {name}.");
+        if (index < 0 || index + 1 >= args.Length) throw new ArgumentException($"Missing argument {name}.");
         return args[index + 1];
     }
 }
