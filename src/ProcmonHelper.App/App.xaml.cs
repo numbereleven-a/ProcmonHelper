@@ -45,7 +45,7 @@ public partial class App : System.Windows.Application
         window.Show();
     }
 
-    private static string GetArg(IReadOnlyList<string> args, string name)
+    private static string GetArg(string[] args, string name)
     {
         var index = args.ToList().FindIndex(x => string.Equals(x, name, StringComparison.OrdinalIgnoreCase));
         if (index < 0 || index + 1 >= args.Count) throw new ArgumentException($"Missing argument {name}.");
