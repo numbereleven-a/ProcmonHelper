@@ -49,6 +49,10 @@ The completed PML path is shown in the status panel. PML files can be opened dir
 
 ProcmonHelper is not added to the selected process list. In **All events** mode it can still appear in the raw PML; use an Exclude rule in a PMC file when physical exclusion is required.
 
+### License
+
+ProcmonHelper is distributed under the [MIT License](LICENSE).
+
 ---
 
 ## Русский
@@ -95,3 +99,7 @@ Process Monitor не входит в комплект и не скачивает
 - **Конфигурация PMC** загружает подготовленный пользователем файл `.PMC`. Используйте этот режим, если сам PML должен быть отфильтрован правилами Process Monitor.
 
 ProcmonHelper не добавляется в список выбранных процессов. В режиме **Все события** он всё равно может присутствовать в исходном PML; для физического исключения добавьте правило Exclude в PMC-файл.
+
+### Лицензия
+
+ProcmonHelper распространяется по условиям [лицензии MIT](LICENSE).
