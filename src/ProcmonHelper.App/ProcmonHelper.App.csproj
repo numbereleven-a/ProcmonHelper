@@ -21,6 +21,7 @@
     <RootNamespace>ProcmonHelper.App</RootNamespace>
     <Version>1.0</Version>
     <InformationalVersion>1.0</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <FileVersion>1.0.0.0</FileVersion>
     <AssemblyVersion>1.0.0.0</AssemblyVersion>
     <PublishSingleFile>true</PublishSingleFile>
