@@ -2,6 +2,8 @@ using ProcmonHelper.Contracts;
 using ProcmonHelper.Infrastructure;
 using ProcmonHelper.Core;
 using System.IO.Pipes;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text.Json;
 using System.Collections.Concurrent;
 
@@ -79,6 +81,24 @@ public sealed class StorageTests : IDisposable
         await repository.SaveAsync(session,CancellationToken.None);
         var found=await repository.FindRecoverableAsync(CancellationToken.None);
         Assert.Contains(found,x=>x.SessionId==session.SessionId && x.SessionDirectory==external);
+    }
+    [Fact]
+    public void SessionDirectoryAllowsElevatedAdministratorWorker()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var paths = new StoragePathResolver(_root);
+        var sessionDirectory = paths.CreateSessionDirectory(Guid.NewGuid());
+        var administratorsSid = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+        var rules = new DirectoryInfo(Path.Combine(sessionDirectory, "procmon")).GetAccessControl()
+            .GetAccessRules(includeExplicit: true, includeInherited: true, typeof(SecurityIdentifier))
+            .Cast<FileSystemAccessRule>();
+        Assert.Contains(rules, rule =>
+            administratorsSid.Equals(rule.IdentityReference) &&
+            rule.IsInherited &&
+            rule.AccessControlType == AccessControlType.Allow &&
+            (rule.FileSystemRights & FileSystemRights.FullControl) == FileSystemRights.FullControl &&
+            rule.InheritanceFlags.HasFlag(InheritanceFlags.ContainerInherit) &&
+            rule.InheritanceFlags.HasFlag(InheritanceFlags.ObjectInherit));
     }
     [Theory]
     [InlineData("//server/share/logs", "\\\\server\\share\\logs")]

@@ -249,6 +249,8 @@ public sealed class ElevatedWorkerClient(ITargetProcessLauncher targetLauncher, 
         pipeSecurity.SetOwner(userSid);
         pipeSecurity.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
         pipeSecurity.AddAccessRule(new PipeAccessRule(userSid, PipeAccessRights.FullControl, AccessControlType.Allow));
+        var administratorsSid = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+        pipeSecurity.AddAccessRule(new PipeAccessRule(administratorsSid, PipeAccessRights.FullControl, AccessControlType.Allow));
         using var pipe = NamedPipeServerStreamAcl.Create(
             pipeName, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous,
             0, 0, pipeSecurity, HandleInheritability.None);

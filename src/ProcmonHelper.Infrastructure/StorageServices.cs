@@ -1,4 +1,6 @@
 using System.Security.Cryptography;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using System.Text.Json;
 using ProcmonHelper.Contracts;
 
@@ -29,10 +31,29 @@ public sealed class StoragePathResolver : IStoragePathResolver
     public string CreateSessionDirectory(Guid sessionId)
     {
         var root = Path.Combine(SessionsRoot, sessionId.ToString("N"));
+        Directory.CreateDirectory(root);
+        GrantSessionAccess(root);
         Directory.CreateDirectory(Path.Combine(root, "procmon"));
         Directory.CreateDirectory(Path.Combine(root, "export"));
         Directory.CreateDirectory(Path.Combine(root, "logs"));
         return root;
+    }
+
+    private static void GrantSessionAccess(string path)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        using var identity = WindowsIdentity.GetCurrent();
+        var userSid = identity.User ?? throw new InvalidOperationException("Unable to determine the current Windows user.");
+        var administratorsSid = new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null);
+        var inheritance = InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit;
+        var directory = new DirectoryInfo(path);
+        var security = directory.GetAccessControl();
+        security.AddAccessRule(new FileSystemAccessRule(userSid, FileSystemRights.FullControl, inheritance,
+            PropagationFlags.None, AccessControlType.Allow));
+        security.AddAccessRule(new FileSystemAccessRule(administratorsSid, FileSystemRights.FullControl, inheritance,
+            PropagationFlags.None, AccessControlType.Allow));
+        directory.SetAccessControl(security);
     }
 
     private static bool CanWrite(string directory)

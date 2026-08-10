@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1
+
+- Support UAC elevation with a separate administrator account while keeping the UI and target application under the initiating user.
+- Grant the elevated capture worker access to the per-session IPC channel and backing PML directory.
+
 ## 1.0
 
 - Initial public release.

@@ -57,7 +57,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
     public string DataRoot { get; }
-    public string ApplicationVersion { get; } = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(2) ?? "1.0";
+    public string ApplicationVersion { get; } = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(2) ?? "1.1";
     public ObservableCollection<CaptureProfile> Profiles { get; } = [];
     public RelayCommand BrowseProcmonCommand { get; }
     public RelayCommand BrowseTargetCommand { get; }
