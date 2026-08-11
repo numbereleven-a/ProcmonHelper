@@ -24,6 +24,7 @@
     <ProjectReference Include="..\..\src\ProcmonHelper.Contracts\ProcmonHelper.Contracts.csproj" />
     <ProjectReference Include="..\..\src\ProcmonHelper.Core\ProcmonHelper.Core.csproj" />
     <ProjectReference Include="..\..\src\ProcmonHelper.Infrastructure\ProcmonHelper.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\ProcmonHelper.App\ProcmonHelper.App.csproj" />
   </ItemGroup>
 
 </Project>

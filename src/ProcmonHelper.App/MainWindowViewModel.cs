@@ -31,6 +31,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private CaptureProfile? _summaryProfile;
     private readonly string _settingsPath;
     private bool _settingsInitialized;
+    private string? _lastUsedProfileName;
 
     public MainWindowViewModel(ISessionManager sessions, IProfileRepository profiles, IStoragePathResolver paths)
     {
@@ -53,7 +54,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _settingsInitialized = true;
     }
 
-    public Task InitializeAsync() => RefreshProfilesAsync();
+    public async Task InitializeAsync()
+    {
+        await RefreshProfilesAsync();
+        if (!LoadLastUsedProfile || string.IsNullOrWhiteSpace(_lastUsedProfileName)) return;
+        var profile = Profiles.FirstOrDefault(x => string.Equals(x.Name, _lastUsedProfileName, StringComparison.OrdinalIgnoreCase));
+        if (profile is null) return;
+        SelectedProfile = profile;
+        ApplyProfile(profile);
+    }
 
     public event PropertyChangedEventHandler? PropertyChanged;
     public string DataRoot { get; }
@@ -97,6 +106,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public bool Topmost { get => Get(false); set { Set(value); SaveApplicationSettings(); } }
     public bool ConfirmStop { get => Get(true); set { Set(value); SaveApplicationSettings(); } }
     public bool OpenFolderAfterCompletion { get => Get(false); set { Set(value); SaveApplicationSettings(); } }
+    public bool LoadLastUsedProfile { get => Get(true); set { Set(value); SaveApplicationSettings(); } }
     public double UiScalePercent
     {
         get => Get(100d);
@@ -198,7 +208,15 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             (profile.FilterMode == FilterMode.PmcConfiguration ? $"; PMC: {profile.PmcPath}" : string.Empty);
     }
 
-    private async Task SaveProfileAsync() { await _profiles.SaveAsync(BuildProfile(), CancellationToken.None); await RefreshProfilesAsync(); StatusMessage = LocalizationService.Get("ProfileSaved"); }
+    private async Task SaveProfileAsync()
+    {
+        var profile = BuildProfile();
+        await _profiles.SaveAsync(profile, CancellationToken.None);
+        await RefreshProfilesAsync();
+        SelectedProfile = Profiles.FirstOrDefault(x => string.Equals(x.Name, profile.Name, StringComparison.OrdinalIgnoreCase));
+        RememberLastUsedProfile(profile.Name);
+        StatusMessage = LocalizationService.Get("ProfileSaved");
+    }
     private async Task RefreshProfilesAsync()
     {
         var selectedName = SelectedProfile?.Name;
@@ -206,7 +224,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         foreach (var p in await _profiles.LoadAllAsync(CancellationToken.None)) Profiles.Add(p);
         SelectedProfile = Profiles.FirstOrDefault(x => string.Equals(x.Name, selectedName, StringComparison.OrdinalIgnoreCase)) ?? Profiles.FirstOrDefault();
     }
-    private void LoadSelectedProfile() { if (SelectedProfile is { } p) ApplyProfile(p); }
+    private void LoadSelectedProfile()
+    {
+        if (SelectedProfile is not { } profile) return;
+        ApplyProfile(profile);
+        RememberLastUsedProfile(profile.Name);
+    }
     private bool CanRenameSelectedProfile() => SelectedProfile is not null;
     private async Task RenameSelectedProfileAsync()
     {
@@ -229,9 +252,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             var renamed = selected with { Name = newName };
             await _profiles.RenameAsync(selected.Name, renamed, CancellationToken.None);
+            if (string.Equals(_lastUsedProfileName, selected.Name, StringComparison.OrdinalIgnoreCase))
+                _lastUsedProfileName = newName;
             await RefreshProfilesAsync();
             SelectedProfile = Profiles.FirstOrDefault(x => string.Equals(x.Name, newName, StringComparison.OrdinalIgnoreCase));
             ProfileName = newName;
+            SaveApplicationSettings();
             StatusMessage = LocalizationService.Get("ProfileRenamed");
         }
         catch (Exception ex)
@@ -288,7 +314,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             var settings = JsonSerializer.Deserialize<ApplicationSettings>(File.ReadAllText(_settingsPath));
             if (settings is null) return;
             Language = settings.Language; Topmost = settings.Topmost; ConfirmStop = settings.ConfirmStop;
-            OpenFolderAfterCompletion = settings.OpenFolderAfterCompletion; UiScalePercent = Math.Clamp(settings.UiScalePercent, 80, 125);
+            OpenFolderAfterCompletion = settings.OpenFolderAfterCompletion; LoadLastUsedProfile = settings.LoadLastUsedProfile;
+            UiScalePercent = Math.Clamp(settings.UiScalePercent, 80, 125); _lastUsedProfileName = settings.LastUsedProfileName;
         }
         catch { }
     }
@@ -298,7 +325,12 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         if (!_settingsInitialized) return;
         try
         {
-            var settings = new ApplicationSettings(Language, Topmost, ConfirmStop, OpenFolderAfterCompletion, UiScalePercent);
+            var settings = new ApplicationSettings
+            {
+                Language = Language, Topmost = Topmost, ConfirmStop = ConfirmStop,
+                OpenFolderAfterCompletion = OpenFolderAfterCompletion, UiScalePercent = UiScalePercent,
+                LoadLastUsedProfile = LoadLastUsedProfile, LastUsedProfileName = _lastUsedProfileName
+            };
             var temp = _settingsPath + ".tmp";
             File.WriteAllText(temp, JsonSerializer.Serialize(settings, SettingsJsonOptions));
             File.Move(temp, _settingsPath, overwrite: true);
@@ -306,7 +338,22 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         catch (Exception ex) { StatusMessage = ex.Message; }
     }
 
-    private sealed record ApplicationSettings(LanguagePreference Language, bool Topmost, bool ConfirmStop, bool OpenFolderAfterCompletion, double UiScalePercent);
+    private void RememberLastUsedProfile(string name)
+    {
+        _lastUsedProfileName = name;
+        SaveApplicationSettings();
+    }
+
+    private sealed record ApplicationSettings
+    {
+        public LanguagePreference Language { get; init; } = LanguagePreference.Automatic;
+        public bool Topmost { get; init; }
+        public bool ConfirmStop { get; init; } = true;
+        public bool OpenFolderAfterCompletion { get; init; }
+        public double UiScalePercent { get; init; } = 100;
+        public bool LoadLastUsedProfile { get; init; } = true;
+        public string? LastUsedProfileName { get; init; }
+    }
 
     private void RequestStop()
     {

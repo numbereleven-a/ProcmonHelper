@@ -4,6 +4,7 @@
 
 - Support UAC elevation with a separate administrator account while keeping the UI and target application under the initiating user.
 - Grant the elevated capture worker access to the per-session IPC channel and backing PML directory.
+- Optionally load the last used profile at startup; enabled by default.
 
 ## 1.0
 

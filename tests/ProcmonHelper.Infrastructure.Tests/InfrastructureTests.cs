@@ -1,4 +1,5 @@
 using ProcmonHelper.Contracts;
+using ProcmonHelper.App;
 using ProcmonHelper.Infrastructure;
 using ProcmonHelper.Core;
 using System.IO.Pipes;
@@ -105,6 +106,55 @@ public sealed class StorageTests : IDisposable
     [InlineData("C:\\logs", "C:\\logs")]
     public void DestinationNormalizationIsSafe(string input,string expected)=>Assert.Equal(expected,SessionManager.NormalizeDestination(input));
     public void Dispose(){if(Directory.Exists(_root))Directory.Delete(_root,true);}
+}
+
+public sealed class ApplicationSettingsTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "ProcmonHelperSettingsTests", Guid.NewGuid().ToString("N"));
+
+    [Fact]
+    public void ExistingSettingsEnableLastProfileLoadingByDefault()
+    {
+        var paths = new StoragePathResolver(_root);
+        File.WriteAllText(Path.Combine(paths.DataRoot, "settings.json"),
+            """{"Language":0,"Topmost":false,"ConfirmStop":true,"OpenFolderAfterCompletion":false,"UiScalePercent":100}""");
+
+        var viewModel = new MainWindowViewModel(new UnusedSessionManager(), new JsonProfileRepository(paths), paths);
+
+        Assert.True(viewModel.LoadLastUsedProfile);
+    }
+
+    [Fact]
+    public async Task LastLoadedProfileIsRestoredOnlyWhenEnabled()
+    {
+        var paths = new StoragePathResolver(_root);
+        var profiles = new JsonProfileRepository(paths);
+        await profiles.SaveAsync(new CaptureProfile { Name = "First", TargetPath = "first.exe" }, CancellationToken.None);
+        await profiles.SaveAsync(new CaptureProfile { Name = "Second", TargetPath = "second.exe" }, CancellationToken.None);
+        var firstRun = new MainWindowViewModel(new UnusedSessionManager(), profiles, paths);
+        await firstRun.InitializeAsync();
+        firstRun.SelectedProfile = firstRun.Profiles.Single(x => x.Name == "Second");
+        firstRun.LoadProfileCommand.Execute(null);
+
+        var secondRun = new MainWindowViewModel(new UnusedSessionManager(), profiles, paths);
+        await secondRun.InitializeAsync();
+        Assert.Equal("Second", secondRun.ProfileName);
+        Assert.Equal("second.exe", secondRun.TargetPath);
+
+        secondRun.LoadLastUsedProfile = false;
+        var thirdRun = new MainWindowViewModel(new UnusedSessionManager(), profiles, paths);
+        await thirdRun.InitializeAsync();
+        Assert.Empty(thirdRun.TargetPath);
+    }
+
+    public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
+
+    private sealed class UnusedSessionManager : ISessionManager
+    {
+        public Task<CaptureResult> CaptureAsync(CaptureProfile profile, IProgress<CaptureProgress>? progress,
+            CancellationToken captureCancellationToken, CancellationToken postProcessCancellationToken = default) =>
+            throw new InvalidOperationException("Capture is not used by application settings tests.");
+    }
 }
 
 public sealed class WorkerProtocolTests
