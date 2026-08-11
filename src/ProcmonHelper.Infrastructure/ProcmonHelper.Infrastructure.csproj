@@ -5,6 +5,10 @@
     <ProjectReference Include="..\ProcmonHelper.Core\ProcmonHelper.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\ExcludeProcmon.pmc" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net8.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

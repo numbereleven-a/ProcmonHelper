@@ -7,6 +7,7 @@ using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text.Json;
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
 
 namespace ProcmonHelper.Infrastructure.Tests;
 
@@ -62,6 +63,26 @@ public sealed class StorageTests : IDisposable
         Assert.Single(loaded); Assert.Equal("test.exe",loaded[0].Processes[0].Name);
     }
     [Fact]
+    public async Task VersionOneProfileEnablesNewProcmonExclusion()
+    {
+        var paths = new StoragePathResolver(_root);
+        var path = Path.Combine(_root, "old-profile.json");
+        await File.WriteAllTextAsync(path, """{"SchemaVersion":1,"Name":"Old","ExcludeProcmon":false,"Processes":[],"Stop":{}}""");
+        var loaded = await new JsonProfileRepository(paths).ImportAsync(path, CancellationToken.None);
+        Assert.Equal(2, loaded.SchemaVersion);
+        Assert.True(loaded.ExcludeProcmon);
+    }
+    [Fact]
+    public async Task VersionTwoProfilePreservesDisabledProcmonExclusion()
+    {
+        var paths = new StoragePathResolver(_root);
+        var repository = new JsonProfileRepository(paths);
+        await repository.SaveAsync(new CaptureProfile { Name = "Disabled", ExcludeProcmon = false }, CancellationToken.None);
+        var loaded = Assert.Single(await repository.LoadAllAsync(CancellationToken.None));
+        Assert.Equal(2, loaded.SchemaVersion);
+        Assert.False(loaded.ExcludeProcmon);
+    }
+    [Fact]
     public async Task ProfileRenameKeepsStableFileAndPreservesSettings()
     {
         var paths=new StoragePathResolver(_root); var repository=new JsonProfileRepository(paths);
@@ -106,6 +127,31 @@ public sealed class StorageTests : IDisposable
     [InlineData("C:\\logs", "C:\\logs")]
     public void DestinationNormalizationIsSafe(string input,string expected)=>Assert.Equal(expected,SessionManager.NormalizeDestination(input));
     public void Dispose(){if(Directory.Exists(_root))Directory.Delete(_root,true);}
+}
+
+public sealed class BuiltInProcmonConfigurationTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "ProcmonHelperTests", Guid.NewGuid().ToString("N"));
+
+    [Fact]
+    public void ProfileDefaultsToExcludingProcmon()
+    {
+        var profile = JsonSerializer.Deserialize<CaptureProfile>("{}")!;
+        Assert.True(profile.ExcludeProcmon);
+    }
+
+    [Fact]
+    public void EmbeddedConfigurationCanBeExtracted()
+    {
+        var path = BuiltInProcmonConfiguration.WriteToDirectory(_root);
+        var hash = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)));
+        Assert.Equal("B64E6FCCE3BE89E01F8F769FA263D9DA4CB5FDD7C115549F6A67BB6683252136", hash);
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_root)) Directory.Delete(_root, recursive: true);
+    }
 }
 
 public sealed class ApplicationSettingsTests : IDisposable

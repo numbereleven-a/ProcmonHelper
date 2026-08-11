@@ -36,7 +36,7 @@ public sealed record StopOptions
 
 public sealed record CaptureProfile
 {
-    public int SchemaVersion { get; init; } = 1;
+    public int SchemaVersion { get; init; } = 2;
     public string Name { get; init; } = "Default";
     public LanguagePreference Language { get; init; } = LanguagePreference.Automatic;
     public string ProcmonPath { get; init; } = string.Empty;
@@ -49,7 +49,7 @@ public sealed record CaptureProfile
     public IReadOnlyList<TrackedProcess> Processes { get; init; } = [];
     public bool AutoIncludeTargetProcess { get; init; } = true;
     public bool ExcludeHelper { get; init; } = true;
-    public bool ExcludeProcmon { get; init; }
+    public bool ExcludeProcmon { get; init; } = true;
     public StopOptions Stop { get; init; } = new();
     public OutputFormats Formats { get; init; } = OutputFormats.Pml;
     public string LocalDirectory { get; init; } = string.Empty;

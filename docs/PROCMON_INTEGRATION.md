@@ -22,6 +22,7 @@ Every argument owned by ProcmonHelper is passed through `ProcessStartInfo.Argume
 
 - `/Terminate` addresses Process Monitor globally; startup therefore refuses to pretend it owns an unrelated existing capture. The UI should ask the user to close an existing Procmon instance before starting.
 - Supported CLI switches do not expose a safe general filter builder. Physical capture filtering is available only through `.PMC` loaded with `/LoadConfig`.
+- When Procmon event exclusion is enabled outside custom-PMC mode, the elevated worker extracts a bundled configuration containing only `Process Name begins with Procmon → Exclude` with `Drop Filtered Events` enabled. A user-provided PMC always takes precedence.
 - Procmon may split large backing files into numbered PML segments. Size enforcement and finalization enumerate every PML sharing the session backing-file stem.
 - CSV/XML export is an offline Procmon operation. PML remains the authoritative artifact if export fails.
-- The binary PMC format is neither parsed nor generated.
+- The binary PMC format is neither parsed nor generated at runtime; the bundled configuration is a fixed, tested resource.

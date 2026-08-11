@@ -87,10 +87,16 @@ public sealed class ElevatedWorkerHost(IProcmonController procmon, IDiskSpaceSer
             int? targetPid = null;
             var lastClientContact = Stopwatch.GetTimestamp();
             Task? progressWrite = null;
-            procmonPid = await procmon.StartAsync(start.Profile, start.BackingFile, cancellationToken);
+            var effectiveProfile = start.Profile;
+            if (effectiveProfile.ExcludeProcmon && effectiveProfile.FilterMode != FilterMode.PmcConfiguration)
+            {
+                var configurationPath = BuiltInProcmonConfiguration.WriteToDirectory(Path.GetDirectoryName(start.BackingFile)!);
+                effectiveProfile = effectiveProfile with { FilterMode = FilterMode.PmcConfiguration, PmcPath = configurationPath };
+            }
+            procmonPid = await procmon.StartAsync(effectiveProfile, start.BackingFile, cancellationToken);
             procmonStarted = true;
             await PipeJson.WriteAsync(writer, new WorkerEvent("started", start.SessionId, "Process Monitor started.", procmonPid), cancellationToken);
-            await procmon.WaitUntilReadyAsync(start.Profile.ProcmonPath, TimeSpan.FromSeconds(30), cancellationToken);
+            await procmon.WaitUntilReadyAsync(effectiveProfile.ProcmonPath, TimeSpan.FromSeconds(30), cancellationToken);
             await PipeJson.WriteAsync(writer, new WorkerEvent("ready", start.SessionId, "Process Monitor is ready.", procmonPid), cancellationToken);
             var readTask = PipeJson.ReadAsync<WorkerCommand>(reader, cancellationToken);
             while (reason == StopReason.None)

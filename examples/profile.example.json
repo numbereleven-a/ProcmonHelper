@@ -1,5 +1,5 @@
 {
-  "SchemaVersion": 1,
+  "SchemaVersion": 2,
   "Name": "Example",
   "Language": 0,
   "ProcmonPath": "",
@@ -27,6 +27,6 @@
   "Topmost": false,
   "AutoIncludeTargetProcess": true,
   "ExcludeHelper": true,
-  "ExcludeProcmon": false,
+  "ExcludeProcmon": true,
   "MinimizeToTray": false
 }

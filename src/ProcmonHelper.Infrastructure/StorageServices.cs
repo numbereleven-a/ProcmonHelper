@@ -188,7 +188,12 @@ public sealed class JsonProfileRepository(IStoragePathResolver paths) : IProfile
         var profile = await JsonSerializer.DeserializeAsync<CaptureProfile>(stream, Options, token) ?? throw new JsonException("Profile is empty.");
         if (profile.Stop is null || profile.Processes is null)
             throw new JsonException("Profile is missing required stop or process settings.");
-        return profile.SchemaVersion switch { 1 => profile, _ => throw new JsonException($"Unsupported profile schema {profile.SchemaVersion}.") };
+        return profile.SchemaVersion switch
+        {
+            1 => profile with { SchemaVersion = 2, ExcludeProcmon = true },
+            2 => profile,
+            _ => throw new JsonException($"Unsupported profile schema {profile.SchemaVersion}.")
+        };
     }
     private static async Task WriteAtomicAsync(CaptureProfile profile, string path, CancellationToken token)
     {

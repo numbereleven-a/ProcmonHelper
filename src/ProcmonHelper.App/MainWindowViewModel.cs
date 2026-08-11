@@ -90,6 +90,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public string PmcPath { get => Get(string.Empty); set => Set(value); }
     public string ProcessNames { get => Get(string.Empty); set => Set(value); }
     public bool AutoIncludeTargetProcess { get => Get(true); set => Set(value); }
+    public bool ExcludeProcmon { get => Get(true); set => Set(value); }
     public bool StopAfterTargetExit { get => Get(true); set => Set(value); }
     public double? ExitDelaySeconds { get => Get<double?>(null); set => Set(value); }
     public double? MaximumDurationSeconds { get => Get<double?>(null); set => Set(value); }
@@ -173,7 +174,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             TargetArguments = TargetArguments, WorkingDirectory = WorkingDirectory, RunTargetElevated = RunTargetElevated,
             FilterMode = FilterMode, PmcPath = PmcPath,
             Processes = processNames.Distinct(StringComparer.OrdinalIgnoreCase).Select(x => new TrackedProcess(x)).ToArray(),
-            AutoIncludeTargetProcess = AutoIncludeTargetProcess, ExcludeHelper = true,
+            AutoIncludeTargetProcess = AutoIncludeTargetProcess, ExcludeHelper = true, ExcludeProcmon = ExcludeProcmon,
             Stop = new StopOptions { StopAfterTargetExit = StopAfterTargetExit, TargetExitDelay = TimeSpan.FromSeconds(ExitDelaySeconds ?? 0), MaximumDuration = MaximumDurationSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : null, MaximumPmlBytes = MaximumSizeGb is { } size ? checked((long)(size * 1024 * 1024 * 1024)) : null, MinimumFreeBytes = checked((long)(MinimumFreeGb * 1024 * 1024 * 1024)) },
             Formats = formats, LocalDirectory = LocalDirectory, DestinationDirectory = DestinationDirectory,
             DestinationIsNetwork = DestinationDirectory.StartsWith("\\\\", StringComparison.Ordinal) || DestinationDirectory.StartsWith("//", StringComparison.Ordinal), FileNameTemplate = FileNameTemplate,
@@ -205,7 +206,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         var processes = profile.Processes.Where(x => x.Enabled).Select(x => x.Name).ToArray();
         var processText = processes.Length == 0 ? LocalizationService.Get("None") : string.Join(", ", processes);
         FilterSummaryText = $"{LocalizationService.Get(modeKey)}; {LocalizationService.Get("ProcessesShort")}: {processText}" +
-            (profile.FilterMode == FilterMode.PmcConfiguration ? $"; PMC: {profile.PmcPath}" : string.Empty);
+            (profile.FilterMode == FilterMode.PmcConfiguration ? $"; PMC: {profile.PmcPath}" : string.Empty) +
+            (profile.FilterMode != FilterMode.PmcConfiguration && profile.ExcludeProcmon ? $"; {LocalizationService.Get("ExcludeProcmonShort")}" : string.Empty);
     }
 
     private async Task SaveProfileAsync()
@@ -277,6 +279,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         FilterMode = p.FilterMode;
         PmcPath = p.PmcPath;
         AutoIncludeTargetProcess = p.AutoIncludeTargetProcess;
+        ExcludeProcmon = p.ExcludeProcmon;
         ProcessNames = string.Join(Environment.NewLine, p.Processes
             .Where(x => !p.AutoIncludeTargetProcess || !string.Equals(x.Name, Path.GetFileName(p.TargetPath), StringComparison.OrdinalIgnoreCase))
             .Select(x => x.Name));

@@ -45,7 +45,7 @@ The completed PML path is shown in the status panel. PML files can be opened dir
 - **Selected processes** stores the process list in the profile and capture summary. It does not physically remove unrelated events from the raw PML.
 - **PMC configuration** loads a user-prepared `.PMC` file. Use this mode when the PML itself must be filtered by Process Monitor rules.
 
-ProcmonHelper is not added to the selected process list. In **All events** mode it can still appear in the raw PML; use an Exclude rule in a PMC file when physical exclusion is required.
+The **Do not write events from Procmon*.exe to PML** option is enabled by default in the first two modes and physically drops those events during capture. A user-prepared PMC takes precedence in **PMC configuration** mode, so add the same exclusion to that file if required.
 
 ## License
 
