@@ -53,5 +53,5 @@ ProcmonHelper is distributed under the [MIT License](LICENSE).
 
 ## Download
 
-[![release](https://img.shields.io/github/v/release/numbereleven-a/ProcmonHelper?label=release&style=flat-square)](https://github.com/numbereleven-a/ProcmonHelper/releases/tag/v1.1)
+[![release](https://img.shields.io/github/v/release/numbereleven-a/ProcmonHelper?label=release&style=flat-square)](https://github.com/numbereleven-a/ProcmonHelper/releases/latest)
 [![downloads](https://img.shields.io/github/downloads/numbereleven-a/ProcmonHelper/total?label=downloads&style=flat-square&color=yellowgreen)](https://github.com/numbereleven-a/ProcmonHelper/releases)

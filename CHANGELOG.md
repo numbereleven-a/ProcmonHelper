@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2
+
+- Added a reset button that restores default settings without deleting saved profiles.
+- Made the Profiles tab more compact.
+
 ## 1.1
 
 - Support UAC elevation with a separate administrator account while keeping the UI and target application under the initiating user.

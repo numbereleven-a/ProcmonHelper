@@ -30,6 +30,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private CaptureProfile? _selectedProfile;
     private CaptureProfile? _summaryProfile;
     private readonly string _settingsPath;
+    private readonly string _defaultLocalDirectory;
     private bool _settingsInitialized;
     private string? _lastUsedProfileName;
 
@@ -37,7 +38,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         _sessions = sessions; _profiles = profiles; DataRoot = paths.DataRoot;
         _settingsPath = Path.Combine(DataRoot, "settings.json");
-        LocalDirectory = Path.Combine(paths.DataRoot, "Captures");
+        _defaultLocalDirectory = Path.Combine(paths.DataRoot, "Captures");
+        LocalDirectory = _defaultLocalDirectory;
         Directory.CreateDirectory(LocalDirectory);
         _statusMessage = LocalizationService.Get("Ready"); _stateText = CaptureState.Idle.ToString();
         BrowseProcmonCommand = new RelayCommand(() => ProcmonPath = PickExecutable(ProcmonPath, "Procmon64.exe") ?? ProcmonPath);
@@ -50,6 +52,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         RefreshProfilesCommand = new AsyncRelayCommand(RefreshProfilesAsync, onError: HandleCommandError);
         LoadProfileCommand = new RelayCommand(LoadSelectedProfile, () => SelectedProfile is not null);
         RenameProfileCommand = new AsyncRelayCommand(RenameSelectedProfileAsync, CanRenameSelectedProfile, HandleCommandError);
+        ResetSettingsCommand = new RelayCommand(ResetSettings, () => !IsRunning);
         LoadApplicationSettings();
         _settingsInitialized = true;
     }
@@ -66,7 +69,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
     public string DataRoot { get; }
-    public string ApplicationVersion { get; } = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(2) ?? "1.1";
+    public string ApplicationVersion { get; } = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(2) ?? "1.2";
     public ObservableCollection<CaptureProfile> Profiles { get; } = [];
     public RelayCommand BrowseProcmonCommand { get; }
     public RelayCommand BrowseTargetCommand { get; }
@@ -78,6 +81,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public AsyncRelayCommand RefreshProfilesCommand { get; }
     public RelayCommand LoadProfileCommand { get; }
     public AsyncRelayCommand RenameProfileCommand { get; }
+    public RelayCommand ResetSettingsCommand { get; }
 
     public string ProcmonPath { get => Get(string.Empty); set { Set(value); ProcmonStatus = File.Exists(value) && string.Equals(Path.GetFileName(value), "Procmon64.exe", StringComparison.OrdinalIgnoreCase) ? "Procmon64.exe" : LocalizationService.Get("NoProcmon"); } }
     public string ProcmonStatus { get => Get(LocalizationService.Get("NoProcmon")); private set => Set(value); }
@@ -114,7 +118,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         set { Set(value); OnPropertyChanged(nameof(UiScale)); SaveApplicationSettings(); }
     }
     public double UiScale => UiScalePercent / 100d;
-    public bool IsRunning { get => _isRunning; private set { if (Set(ref _isRunning, value)) { StartCommand.RaiseCanExecuteChanged(); StopCommand.RaiseCanExecuteChanged(); } } }
+    public bool IsRunning { get => _isRunning; private set { if (Set(ref _isRunning, value)) { StartCommand.RaiseCanExecuteChanged(); StopCommand.RaiseCanExecuteChanged(); ResetSettingsCommand.RaiseCanExecuteChanged(); } } }
     public string StatusMessage { get => _statusMessage; private set => Set(ref _statusMessage, value); }
     public string StateText { get => _stateText; private set => Set(ref _stateText, value); }
     public double ProgressPercent { get => _progressPercent; private set => Set(ref _progressPercent, value); }
@@ -295,6 +299,45 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         SaveXml = p.Formats.HasFlag(OutputFormats.Xml);
         OverwriteExisting = p.OverwriteExisting;
         Topmost = p.Topmost;
+    }
+
+    private void ResetSettings()
+    {
+        ProcmonPath = string.Empty;
+        TargetPath = string.Empty;
+        TargetArguments = string.Empty;
+        WorkingDirectory = string.Empty;
+        RunTargetElevated = false;
+        FilterMode = FilterMode.AllEvents;
+        PmcPath = string.Empty;
+        ProcessNames = string.Empty;
+        AutoIncludeTargetProcess = true;
+        ExcludeProcmon = true;
+        StopAfterTargetExit = true;
+        ExitDelaySeconds = null;
+        MaximumDurationSeconds = null;
+        MaximumSizeGb = 2d;
+        MinimumFreeGb = 1d;
+        LocalDirectory = _defaultLocalDirectory;
+        DestinationDirectory = string.Empty;
+        FileNameTemplate = "{AppName}_{ComputerName}_{DateTime}";
+        SaveCsv = false;
+        SaveXml = false;
+        OverwriteExisting = false;
+        ProfileName = "Default";
+        Language = LanguagePreference.Automatic;
+        Topmost = false;
+        ConfirmStop = true;
+        OpenFolderAfterCompletion = false;
+        LoadLastUsedProfile = true;
+        UiScalePercent = 100d;
+        _lastUsedProfileName = null;
+        _summaryProfile = null;
+        SavePathText = "—";
+        StopSummaryText = "—";
+        FilterSummaryText = "—";
+        SaveApplicationSettings();
+        StatusMessage = LocalizationService.Get("SettingsReset");
     }
 
     private static string? PickExecutable(string current, string filterName) { var dialog = new Microsoft.Win32.OpenFileDialog { Filter = $"Executables ({filterName})|{filterName}|All files|*.*", FileName = current }; return dialog.ShowDialog() == true ? dialog.FileName : null; }
