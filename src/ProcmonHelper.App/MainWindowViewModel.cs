@@ -53,6 +53,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         LoadProfileCommand = new RelayCommand(LoadSelectedProfile, () => SelectedProfile is not null);
         RenameProfileCommand = new AsyncRelayCommand(RenameSelectedProfileAsync, CanRenameSelectedProfile, HandleCommandError);
         ResetSettingsCommand = new RelayCommand(ResetSettings, () => !IsRunning);
+        OpenOutputFolderCommand = new RelayCommand(OpenOutputFolder);
         LoadApplicationSettings();
         _settingsInitialized = true;
     }
@@ -82,6 +83,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public RelayCommand LoadProfileCommand { get; }
     public AsyncRelayCommand RenameProfileCommand { get; }
     public RelayCommand ResetSettingsCommand { get; }
+    public RelayCommand OpenOutputFolderCommand { get; }
 
     public string ProcmonPath { get => Get(string.Empty); set { Set(value); ProcmonStatus = File.Exists(value) && string.Equals(Path.GetFileName(value), "Procmon64.exe", StringComparison.OrdinalIgnoreCase) ? "Procmon64.exe" : LocalizationService.Get("NoProcmon"); } }
     public string ProcmonStatus { get => Get(LocalizationService.Get("NoProcmon")); private set => Set(value); }
@@ -342,6 +344,19 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     private static string? PickExecutable(string current, string filterName) { var dialog = new Microsoft.Win32.OpenFileDialog { Filter = $"Executables ({filterName})|{filterName}|All files|*.*", FileName = current }; return dialog.ShowDialog() == true ? dialog.FileName : null; }
     private static string? PickFolder(string current) { using var dialog = new Forms.FolderBrowserDialog { InitialDirectory = Directory.Exists(current) ? current : string.Empty, ShowNewFolderButton = true }; return dialog.ShowDialog() == Forms.DialogResult.OK ? dialog.SelectedPath : null; }
+    private void OpenOutputFolder()
+    {
+        var directory = File.Exists(SavePathText) ? Path.GetDirectoryName(SavePathText) :
+            Directory.Exists(SavePathText) ? SavePathText :
+            Directory.Exists(LocalDirectory) ? LocalDirectory : null;
+        if (directory is null)
+        {
+            StatusMessage = LocalizationService.Get("OutputFolderUnavailable");
+            return;
+        }
+        try { Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true }); }
+        catch (Exception ex) { StatusMessage = ex.Message; }
+    }
     private static string FormatSize(long value) => value >= 1024*1024*1024 ? $"{value/(1024d*1024*1024):0.00} GB" : value >= 1024*1024 ? $"{value/(1024d*1024):0.0} MB" : $"{value/1024d:0} KB";
     private void HandleCommandError(Exception ex) => StatusMessage = ex.Message;
     private void RefreshLocalizedValues()

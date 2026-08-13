@@ -4,6 +4,7 @@
 
 - Added a reset button that restores default settings without deleting saved profiles.
 - Made the Profiles tab more compact.
+- Added a button to open the output folder.
 
 ## 1.1
 
