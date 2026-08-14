@@ -32,7 +32,8 @@ public sealed class SessionManager(
         var captureDirectory = Path.GetFullPath(profile.LocalDirectory);
         Directory.CreateDirectory(captureDirectory);
         var captureTimestamp = clock.Now;
-        var initialContext = new FileNameContext(Path.GetFileNameWithoutExtension(profile.TargetPath), profile.Name, sessionId, null, captureTimestamp);
+        var appName = profile.LaunchTarget ? Path.GetFileNameWithoutExtension(profile.TargetPath) : "Monitoring";
+        var initialContext = new FileNameContext(appName, profile.Name, sessionId, null, captureTimestamp);
         var baseName = FileNameTemplate.Expand(profile.FileNameTemplate, initialContext);
         var backingFile = Path.Combine(sessionDirectory, "procmon", "capture.pml");
         if (disk.GetFreeBytes(captureDirectory) <= profile.Stop.MinimumFreeBytes || disk.GetFreeBytes(sessionDirectory) <= profile.Stop.MinimumFreeBytes)
@@ -45,7 +46,8 @@ public sealed class SessionManager(
             Warnings = issues.Where(x => x.IsWarning).Select(x => x.Message).ToArray()
         };
         var logPath = Path.Combine(sessionDirectory, "logs", "capture.log");
-        await AppendLogAsync(logPath, $"Session created. Procmon={profile.ProcmonPath}; Target={profile.TargetPath}; Backing={backingFile}; Output={captureDirectory}");
+        var targetDescription = profile.LaunchTarget ? profile.TargetPath : "(not launched)";
+        await AppendLogAsync(logPath, $"Session created. Procmon={profile.ProcmonPath}; Target={targetDescription}; Backing={backingFile}; Output={captureDirectory}");
         await sessions.SaveAsync(record, captureCancellationToken);
         try
         {
@@ -133,13 +135,13 @@ public sealed class SessionManager(
                     var destination = NormalizeDestination(profile.DestinationDirectory);
                     Directory.CreateDirectory(destination);
                     var copied = new List<string>();
-                    for (var index = 0; index < files.Count; index++)
+                    foreach (var source in files)
                     {
-                        var source = files[index];
-                        var suffix = files.Count > 1 ? $"_{index + 1:000}" : string.Empty;
+                        var sourceName = Path.GetFileNameWithoutExtension(source);
+                        var extension = Path.GetExtension(source);
                         var target = profile.OverwriteExisting
-                            ? Path.Combine(destination, baseName + suffix + Path.GetExtension(source))
-                            : FileNameTemplate.GetUniquePath(destination, baseName + suffix, Path.GetExtension(source));
+                            ? Path.Combine(destination, sourceName + extension)
+                            : FileNameTemplate.GetUniquePath(destination, sourceName, extension);
                         var transferProgress = new Progress<FileTransferProgress>(x => progress?.Report(new(CaptureState.Copying, "Copying files", TimeSpan.Zero, 0, 0, capture.TargetPid, capture.Reason, x.Percent)));
                         copied.Add(await transfer.CopyAtomicAsync(source, target, profile.OverwriteExisting, transferProgress, postProcessCancellationToken));
                     }

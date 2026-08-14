@@ -16,6 +16,15 @@ public sealed class StateMachineTests
 
     [Fact]
     public void InvalidTransition_IsRejected() => Assert.Throws<InvalidOperationException>(() => new CaptureStateMachine().TransitionTo(CaptureState.Capturing));
+
+    [Fact]
+    public void MonitoringOnlyLifecycleSkipsTargetLaunch()
+    {
+        var state = new CaptureStateMachine();
+        foreach (var next in new[] { CaptureState.Validating, CaptureState.Preparing, CaptureState.WaitingForElevation, CaptureState.StartingProcmon, CaptureState.WaitingForProcmon, CaptureState.Capturing })
+            state.TransitionTo(next);
+        Assert.Equal(CaptureState.Capturing, state.State);
+    }
 }
 
 public sealed class StopConditionTests
@@ -37,6 +46,7 @@ public sealed class FileNameTests
     }
     [Fact] public void ReservedNameIsPrefixed() => Assert.Equal("_CON", FileNameTemplate.Expand("CON", new("a","p",Guid.NewGuid(),null,DateTimeOffset.Now)));
     [Fact] public void ReservedDeviceNameBeforeDotIsPrefixed() => Assert.Equal("_CON.log", FileNameTemplate.Expand("CON.log", new("a","p",Guid.NewGuid(),null,DateTimeOffset.Now)));
+    [Fact] public void UnknownTokenIsRejected() => Assert.Throws<ArgumentException>(() => FileNameTemplate.Expand("{AppNmae}_{Date}", new("a","p",Guid.NewGuid(),null,DateTimeOffset.Now)));
     [Fact] public void TruncatedNameDoesNotEndWithDotOrSpace()
     {
         var value=FileNameTemplate.Expand(new string('a',179)+" .tail",new("a","p",Guid.NewGuid(),null,DateTimeOffset.Now));
@@ -51,4 +61,25 @@ public sealed class ProfileValidationTests
     [InlineData("SERVICE.EXE", "SERVICE.EXE")]
     public void ProcessNamesAreNormalized(string input, string expected) => Assert.Equal(expected, ProfileValidator.NormalizeProcessName(input));
     [Fact] public void PathLikeProcessNameIsRejected() => Assert.False(ProfileValidator.IsValidProcessName("..\\service.exe"));
+    [Fact]
+    public void MonitoringOnlyDoesNotRequireTargetExecutable()
+    {
+        var profile = new CaptureProfile { LaunchTarget = false, Stop = new StopOptions { StopAfterTargetExit = false } };
+        var issues = new ProfileValidator().Validate(profile);
+        Assert.DoesNotContain(issues, issue => issue.Field == nameof(CaptureProfile.TargetPath));
+    }
+    [Fact]
+    public void NetworkPathIsAcceptedAsCaptureDirectory()
+    {
+        var profile = new CaptureProfile { LaunchTarget = false, LocalDirectory = @"\\server\share", FileNameTemplate = "{Date}" };
+        var issues = new ProfileValidator().Validate(profile);
+        Assert.DoesNotContain(issues, issue => issue.Field == nameof(CaptureProfile.LocalDirectory));
+    }
+    [Fact]
+    public void UnknownFileNameTokenIsReported()
+    {
+        var profile = new CaptureProfile { LaunchTarget = false, LocalDirectory = Path.GetTempPath(), FileNameTemplate = "{AppNmae}" };
+        var issues = new ProfileValidator().Validate(profile);
+        Assert.Contains(issues, issue => issue.Field == nameof(CaptureProfile.FileNameTemplate));
+    }
 }

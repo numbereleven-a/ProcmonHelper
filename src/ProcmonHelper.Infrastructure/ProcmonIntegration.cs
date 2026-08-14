@@ -32,14 +32,6 @@ public sealed class ProcmonCommandBuilder : IProcmonCommandBuilder
 
 public sealed class ProcmonCapabilityDetector : IProcmonCapabilityDetector
 {
-    private static readonly HashSet<string> KnownSwitches = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "/OpenLog", "/BackingFile", "/NoConnect", "/NoFilter", "/AcceptEula", "/Profiling",
-        "/PagingFile", "/Minimized", "/Terminate", "/Quiet", "/Run32", "/WaitForIdle",
-        "/SaveAs", "/SaveAs1", "/SaveAs2", "/LoadConfig", "/SaveApplyFilter", "/Runtime",
-        "/RingBuffer", "/RingBufferSize", "/RingBufferLen"
-    };
-
     public Task<ProcmonCapabilities> DetectAsync(string executablePath, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -48,7 +40,7 @@ public sealed class ProcmonCapabilityDetector : IProcmonCapabilityDetector
             throw new InvalidOperationException("The selected executable must be Procmon64.exe.");
         var info = FileVersionInfo.GetVersionInfo(executablePath);
         var version = Version.TryParse(info.FileVersion?.Split(' ').FirstOrDefault(), out var parsed) ? parsed : new Version(0, 0);
-        return Task.FromResult(new ProcmonCapabilities(version, KnownSwitches, true, true, true, true));
+        return Task.FromResult(new ProcmonCapabilities(version));
     }
 }
 
@@ -81,7 +73,7 @@ public sealed class ProcmonController(IProcmonCommandBuilder commandBuilder) : I
     public async Task ExportAsync(string executablePath, string pmlPath, string destinationPath, bool applyFilter, CancellationToken cancellationToken)
     {
         using var process = Start(executablePath, commandBuilder.BuildExport(pmlPath, destinationPath, applyFilter));
-        await WaitWithTimeoutAsync(process, TimeSpan.FromMinutes(5), "Process Monitor export timed out.", cancellationToken);
+        await WaitWithTimeoutAsync(process, TimeSpan.FromMinutes(30), "Process Monitor export timed out.", cancellationToken);
         if (process.ExitCode != 0 || !File.Exists(destinationPath))
             throw new InvalidOperationException($"Process Monitor export failed (code {process.ExitCode}).");
     }
@@ -108,7 +100,7 @@ public sealed class ProcmonController(IProcmonCommandBuilder commandBuilder) : I
 
 public sealed class TargetProcessLauncher : ITargetProcessLauncher
 {
-    public Task<int> LaunchAsync(CaptureProfile profile, CancellationToken cancellationToken)
+    public Task<LaunchedTarget> LaunchAsync(CaptureProfile profile, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var startInfo = new ProcessStartInfo(profile.TargetPath)
@@ -121,7 +113,7 @@ public sealed class TargetProcessLauncher : ITargetProcessLauncher
         };
         foreach (var argument in WindowsCommandLineParser.Parse(profile.TargetArguments)) startInfo.ArgumentList.Add(argument);
         using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Unable to start target process.");
-        return Task.FromResult(process.Id);
+        return Task.FromResult(new LaunchedTarget(process.Id, process.StartTime.ToUniversalTime()));
     }
 }
 

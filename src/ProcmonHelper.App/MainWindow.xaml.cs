@@ -12,22 +12,21 @@ public partial class MainWindow : Window
 {
     private readonly MainWindowViewModel _viewModel;
     private readonly Forms.NotifyIcon _tray;
+    private readonly Forms.ContextMenuStrip _trayMenu;
     private bool _closingAfterCapture;
 
     public MainWindow(MainWindowViewModel viewModel)
     {
         InitializeComponent();
         _viewModel = viewModel;
+        _trayMenu = new Forms.ContextMenuStrip();
         DataContext = viewModel;
-        var menu = new Forms.ContextMenuStrip();
-        menu.Items.Add("ProcmonHelper", null, (_, _) => Restore());
-        menu.Items.Add("Stop", null, (_, _) => { if (_viewModel.StopCommand.CanExecute(null)) _viewModel.StopCommand.Execute(null); });
-        menu.Items.Add("Exit", null, (_, _) => Close());
+        RefreshTrayMenu();
         _tray = new Forms.NotifyIcon
         {
             Icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!),
             Text = "ProcmonHelper",
-            ContextMenuStrip = menu,
+            ContextMenuStrip = _trayMenu,
             Visible = true
         };
         _tray.DoubleClick += (_, _) => Restore();
@@ -38,16 +37,28 @@ public partial class MainWindow : Window
         if (_viewModel.IsRunning && !_closingAfterCapture)
         {
             e.Cancel = true;
-            await _viewModel.StopAndWaitForShutdownAsync();
             _closingAfterCapture = true;
+            await _viewModel.StopAndWaitForShutdownAsync();
             Close();
             return;
         }
         _tray.Visible = false;
         _tray.Dispose();
+        _trayMenu.Dispose();
         base.OnClosing(e);
     }
 
     private void Restore() { Show(); WindowState = WindowState.Normal; Activate(); }
-    private void LanguageChanged(object sender, SelectionChangedEventArgs e) => LocalizationService.Apply(_viewModel.Language);
+    private void RefreshTrayMenu()
+    {
+        _trayMenu.Items.Clear();
+        _trayMenu.Items.Add(LocalizationService.Get("TrayRestore"), null, (_, _) => Restore());
+        _trayMenu.Items.Add(LocalizationService.Get("TrayStop"), null, (_, _) => { if (_viewModel.StopCommand.CanExecute(null)) _viewModel.StopCommand.Execute(null); });
+        _trayMenu.Items.Add(LocalizationService.Get("TrayExit"), null, (_, _) => Close());
+    }
+    private void LanguageChanged(object sender, SelectionChangedEventArgs e)
+    {
+        LocalizationService.Apply(_viewModel.Language);
+        RefreshTrayMenu();
+    }
 }

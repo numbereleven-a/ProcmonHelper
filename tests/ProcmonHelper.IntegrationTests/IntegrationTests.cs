@@ -112,6 +112,41 @@ public sealed class RealProcmonSmokeTests
     }
 
     [SkippableFact]
+    public async Task CapturesWithoutLaunchingTarget_WhenExplicitlyEnabled()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var procmonPath = Environment.GetEnvironmentVariable("PROCMON64_PATH");
+        var helperPath = Environment.GetEnvironmentVariable("PROCMONHELPER_EXE");
+        Skip.If(string.IsNullOrWhiteSpace(procmonPath) || string.IsNullOrWhiteSpace(helperPath), "PROCMON64_PATH and PROCMONHELPER_EXE are required.");
+        Assert.True(File.Exists(procmonPath));
+        Assert.True(File.Exists(helperPath));
+        var root = Path.Combine(Path.GetTempPath(), "ProcmonHelperMonitoringSmoke", Guid.NewGuid().ToString("N"));
+        var captureDirectory = Path.Combine(root, "captures");
+        Directory.CreateDirectory(captureDirectory);
+        var profile = new CaptureProfile
+        {
+            ProcmonPath = procmonPath,
+            LaunchTarget = false,
+            TargetPath = string.Empty,
+            LocalDirectory = captureDirectory,
+            Stop = new StopOptions { StopAfterTargetExit = false, MaximumDuration = TimeSpan.FromSeconds(4), MaximumPmlBytes = 256 * 1024 * 1024, MinimumFreeBytes = 64 * 1024 * 1024 }
+        };
+        var paths = new StoragePathResolver(Path.Combine(root, "app"));
+        var clock = new SystemClock();
+        var manager = new SessionManager(new ProfileValidator(), paths, new JsonSessionRepository(paths, clock),
+            new ElevatedWorkerClient(new TargetProcessLauncher(), helperPath), new ProcmonController(new ProcmonCommandBuilder()), new ProcmonCapabilityDetector(),
+            new FileTransferService(), new DiskSpaceService(), clock);
+
+        var result = await manager.CaptureAsync(profile, null, CancellationToken.None);
+
+        Assert.Equal(StopReason.DurationReached, result.Session.StopReason);
+        Assert.Null(result.Session.TargetPid);
+        var pml = Assert.Single(result.Files.Where(x => string.Equals(Path.GetExtension(x), ".pml", StringComparison.OrdinalIgnoreCase)));
+        Assert.StartsWith("Monitoring_", Path.GetFileName(pml), StringComparison.OrdinalIgnoreCase);
+        Assert.True(new FileInfo(pml).Length > 0);
+    }
+
+    [SkippableFact]
     public async Task ManualStopFinalizesAndSavesPml_WhenExplicitlyEnabled()
     {
         if (!OperatingSystem.IsWindows()) return;

@@ -6,15 +6,16 @@ English · [Русский](README_RU.md)
 
 Process Monitor records activity from the entire system. Starting a capture too early or stopping it too late fills the PML with unrelated events and makes the useful information harder to find.
 
-ProcmonHelper starts capture immediately before launching the selected application and stops it at the required moment. This produces a smaller, cleaner, and more focused log containing the application startup and the activity needed for diagnosis.
+ProcmonHelper can start capture immediately before launching a selected application, or monitor the system without launching one. It stops collection at the required moment and preserves the resulting PML.
 
 ## Why use it
 
 - Capture begins immediately before the target application starts: early startup events are preserved without collecting unrelated activity beforehand.
+- The target launch can be disabled when only system monitoring is required.
 - Capture stops at the required moment instead of continuing to fill the log with unnecessary events.
 - Collection can stop automatically when the target closes, after a time limit, at a PML size limit, or when the free-space reserve is reached.
 - Manual stop finalizes and preserves the collected PML.
-- The PML is saved locally first, so a failed CSV/XML export or network copy does not discard the main trace.
+- The PML is staged locally during capture and can then be saved to either a local folder or a UNC network share.
 - Reusable profiles keep launch, capture, stop, and save settings together.
 - The status panel shows capture timing, active conditions, filters, and the saved file path.
 - No installation is required: the release is a single portable EXE.
@@ -31,11 +32,11 @@ Process Monitor is not included and is never downloaded automatically. If its li
 
 1. Download and extract Process Monitor.
 2. Start `ProcmonHelper.exe` and select `Procmon64.exe`.
-3. Select the application whose launch you want to trace. Arguments and working directory are optional.
+3. Select the application whose launch you want to trace, or clear **Launch a target application** for monitoring-only capture.
 4. Configure capture mode and stop conditions.
-5. Select the local folder where the PML should be saved.
+5. Select the local folder or UNC network share where the PML should be saved.
 6. Click **Start capture** and approve elevation.
-7. Use the launched application normally. Stop it manually when needed, or let the configured condition stop the capture.
+7. Use the launched application or monitored system normally. Stop capture manually when needed, or let a configured condition stop it.
 
 The completed PML path is shown in the status panel. PML files can be opened directly in Process Monitor.
 

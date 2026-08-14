@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3
+
+- Added capture without launching a target application and a PMC file picker.
+- Added PML saving to local folders and UNC network shares.
+- Improved capture lifecycle, elevated-worker IPC, shutdown, and target-exit detection.
+- Fixed output file naming, profile validation, numeric limits, and localization.
+
 ## 1.2
 
 - Added a reset button that restores default settings without deleting saved profiles.

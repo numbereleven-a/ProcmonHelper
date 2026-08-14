@@ -12,7 +12,7 @@ public sealed class CaptureStateMachine
             [CaptureState.Preparing] = [CaptureState.WaitingForElevation, CaptureState.Failed],
             [CaptureState.WaitingForElevation] = [CaptureState.StartingProcmon, CaptureState.Failed],
             [CaptureState.StartingProcmon] = [CaptureState.WaitingForProcmon, CaptureState.Failed],
-            [CaptureState.WaitingForProcmon] = [CaptureState.LaunchingTarget, CaptureState.StopRequested, CaptureState.Failed],
+            [CaptureState.WaitingForProcmon] = [CaptureState.LaunchingTarget, CaptureState.Capturing, CaptureState.StopRequested, CaptureState.Failed],
             [CaptureState.LaunchingTarget] = [CaptureState.Capturing, CaptureState.StopRequested, CaptureState.Failed],
             [CaptureState.Capturing] = [CaptureState.StopRequested, CaptureState.Failed],
             [CaptureState.StopRequested] = [CaptureState.StoppingProcmon, CaptureState.Failed],

@@ -1,6 +1,6 @@
 # Session lifecycle
 
-The allowed states are `Idle → Validating → Preparing → WaitingForElevation → StartingProcmon → WaitingForProcmon → LaunchingTarget → Capturing → StopRequested → StoppingProcmon → Finalizing`, followed by optional `Exporting` and `Copying`, then a terminal state.
+The normal target-launch path is `Idle → Validating → Preparing → WaitingForElevation → StartingProcmon → WaitingForProcmon → LaunchingTarget → Capturing → StopRequested → StoppingProcmon → Finalizing`. Monitoring-only capture skips `LaunchingTarget` and transitions directly from `WaitingForProcmon` to `Capturing`. Optional `Exporting` and `Copying` states follow finalization before a terminal state.
 
 Invalid transitions throw immediately. A session directory is created before elevation and includes `session.json`, `procmon/`, `export/`, and `logs/`. The worker stops Procmon in a bounded cleanup block on normal stop, IPC loss, or cancellation. A failed target launch therefore cannot intentionally leave capture running.
 

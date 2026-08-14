@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using System.Security.AccessControl;
 using System.Security.Principal;
 using System.Text.Json;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
 using ProcmonHelper.Contracts;
 
 namespace ProcmonHelper.Infrastructure;
@@ -74,9 +76,20 @@ public sealed class DiskSpaceService : IDiskSpaceService
     public long GetFreeBytes(string path)
     {
         var full = Path.GetFullPath(path);
+        if (OperatingSystem.IsWindows())
+        {
+            if (!GetDiskFreeSpaceEx(full, out var available, out _, out _))
+                throw new IOException($"Unable to determine available space for '{full}'.", new Win32Exception(Marshal.GetLastWin32Error()));
+            return available > long.MaxValue ? long.MaxValue : (long)available;
+        }
         var root = Path.GetPathRoot(full) ?? throw new InvalidOperationException("Unable to determine drive.");
         return new DriveInfo(root).AvailableFreeSpace;
     }
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetDiskFreeSpaceEx(string directoryName, out ulong freeBytesAvailable,
+        out ulong totalNumberOfBytes, out ulong totalNumberOfFreeBytes);
 }
 
 public sealed class HashService : IHashService
@@ -171,16 +184,20 @@ public sealed class JsonProfileRepository(IStoragePathResolver paths) : IProfile
 
     private async Task<string?> FindPathByNameAsync(string name, CancellationToken token)
     {
-        foreach (var path in Directory.EnumerateFiles(paths.ProfilesRoot, "*.json"))
+        string? match = null;
+        foreach (var path in Directory.EnumerateFiles(paths.ProfilesRoot, "*.json").Order(StringComparer.OrdinalIgnoreCase))
         {
             try
             {
                 var profile = await ReadAsync(path, token);
-                if (string.Equals(profile.Name, name, StringComparison.OrdinalIgnoreCase)) return path;
+                if (!string.Equals(profile.Name, name, StringComparison.OrdinalIgnoreCase)) continue;
+                if (match is not null)
+                    throw new IOException($"More than one saved profile is named '{name}'. Rename or remove the duplicate profile files.");
+                match = path;
             }
             catch (JsonException) { }
         }
-        return null;
+        return match;
     }
     private static async Task<CaptureProfile> ReadAsync(string path, CancellationToken token)
     {
@@ -190,8 +207,9 @@ public sealed class JsonProfileRepository(IStoragePathResolver paths) : IProfile
             throw new JsonException("Profile is missing required stop or process settings.");
         return profile.SchemaVersion switch
         {
-            1 => profile with { SchemaVersion = 2, ExcludeProcmon = true },
-            2 => profile,
+            1 => profile with { SchemaVersion = 3, ExcludeProcmon = true, LaunchTarget = true },
+            2 => profile with { SchemaVersion = 3, LaunchTarget = true },
+            3 => profile,
             _ => throw new JsonException($"Unsupported profile schema {profile.SchemaVersion}.")
         };
     }

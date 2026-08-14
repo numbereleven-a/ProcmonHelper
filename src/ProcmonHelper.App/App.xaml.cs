@@ -36,13 +36,22 @@ public partial class App : System.Windows.Application
             return;
         }
 
-        var services = ServiceRegistry.Create();
-        LocalizationService.Apply(LanguagePreference.Automatic);
-        var viewModel = new MainWindowViewModel(services.SessionManager, services.ProfileRepository, services.Paths);
-        await viewModel.InitializeAsync();
-        var window = new MainWindow(viewModel);
-        MainWindow = window;
-        window.Show();
+        try
+        {
+            var services = ServiceRegistry.Create();
+            LocalizationService.Apply(LanguagePreference.Automatic);
+            var viewModel = new MainWindowViewModel(services.SessionManager, services.ProfileRepository, services.Paths);
+            await viewModel.InitializeAsync();
+            var window = new MainWindow(viewModel);
+            MainWindow = window;
+            window.Show();
+        }
+        catch (Exception ex)
+        {
+            var logPath = await WriteStartupErrorAsync("app-startup.log", ex);
+            System.Windows.MessageBox.Show($"ProcmonHelper could not start.\n\n{ex.Message}\n\nLog: {logPath}", "ProcmonHelper", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown(1);
+        }
     }
 
     private static string GetArg(string[] args, string name)
@@ -50,6 +59,19 @@ public partial class App : System.Windows.Application
         var index = args.ToList().FindIndex(x => string.Equals(x, name, StringComparison.OrdinalIgnoreCase));
         if (index < 0 || index + 1 >= args.Length) throw new ArgumentException($"Missing argument {name}.");
         return args[index + 1];
+    }
+
+    private static async Task<string> WriteStartupErrorAsync(string fileName, Exception exception)
+    {
+        var logRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ProcmonHelper", "Logs");
+        var logPath = Path.Combine(logRoot, fileName);
+        try
+        {
+            Directory.CreateDirectory(logRoot);
+            await File.AppendAllTextAsync(logPath, $"{DateTimeOffset.Now:O} {exception}{Environment.NewLine}");
+        }
+        catch { }
+        return logPath;
     }
 }
 

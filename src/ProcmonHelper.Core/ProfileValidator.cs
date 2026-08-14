@@ -24,12 +24,15 @@ public sealed class ProfileValidator
         else if (!string.Equals(Path.GetFileName(profile.ProcmonPath), "Procmon64.exe", StringComparison.OrdinalIgnoreCase))
             issues.Add(new(nameof(profile.ProcmonPath), "Select the x64 executable named Procmon64.exe."));
 
-        if (!File.Exists(profile.TargetPath))
-            issues.Add(new(nameof(profile.TargetPath), "Target executable does not exist."));
-        else if (!string.Equals(Path.GetExtension(profile.TargetPath), ".exe", StringComparison.OrdinalIgnoreCase) || !IsPortableExecutable(profile.TargetPath))
-            issues.Add(new(nameof(profile.TargetPath), "Target must be a Windows PE executable (.exe), not a script, shortcut, or document."));
-        if (!string.IsNullOrWhiteSpace(profile.WorkingDirectory) && !Directory.Exists(profile.WorkingDirectory))
-            issues.Add(new(nameof(profile.WorkingDirectory), "Working directory does not exist."));
+        if (profile.LaunchTarget)
+        {
+            if (!File.Exists(profile.TargetPath))
+                issues.Add(new(nameof(profile.TargetPath), "Target executable does not exist."));
+            else if (!string.Equals(Path.GetExtension(profile.TargetPath), ".exe", StringComparison.OrdinalIgnoreCase) || !IsPortableExecutable(profile.TargetPath))
+                issues.Add(new(nameof(profile.TargetPath), "Target must be a Windows PE executable (.exe), not a script, shortcut, or document."));
+            if (!string.IsNullOrWhiteSpace(profile.WorkingDirectory) && !Directory.Exists(profile.WorkingDirectory))
+                issues.Add(new(nameof(profile.WorkingDirectory), "Working directory does not exist."));
+        }
         if (profile.FilterMode == FilterMode.PmcConfiguration && !File.Exists(profile.PmcPath))
             issues.Add(new(nameof(profile.PmcPath), "The selected PMC configuration does not exist."));
         if (stop.MaximumDuration is { } duration && duration <= TimeSpan.Zero)
@@ -40,12 +43,20 @@ public sealed class ProfileValidator
             issues.Add(new("Stop.MaximumPmlBytes", "PML size limit must be at least 1 MB."));
         if (stop.MinimumFreeBytes < 64L * 1024 * 1024)
             issues.Add(new("Stop.MinimumFreeBytes", "Free-space reserve must be at least 64 MB."));
-        if (!stop.StopAfterTargetExit && stop.MaximumDuration is null && stop.MaximumPmlBytes is null)
+        if ((!profile.LaunchTarget || !stop.StopAfterTargetExit) && stop.MaximumDuration is null && stop.MaximumPmlBytes is null)
             issues.Add(new("Stop", "Only manual stop is enabled; the session has no automatic safety limit.", true));
+        if (!profile.LaunchTarget && stop.StopAfterTargetExit)
+            issues.Add(new("Stop.StopAfterTargetExit", "Target-exit stopping is ignored when no target application is launched.", true));
         if (string.IsNullOrWhiteSpace(profile.LocalDirectory))
             issues.Add(new(nameof(profile.LocalDirectory), "Select a local capture directory."));
         if (string.IsNullOrWhiteSpace(profile.FileNameTemplate))
             issues.Add(new(nameof(profile.FileNameTemplate), "File name template cannot be empty."));
+        else
+        {
+            var unknownTokens = FileNameTemplate.FindUnknownTokens(profile.FileNameTemplate);
+            if (unknownTokens.Count > 0)
+                issues.Add(new(nameof(profile.FileNameTemplate), $"Unknown or malformed file-name template token: {string.Join(", ", unknownTokens.Select(x => $"{{{x}}}"))}."));
+        }
 
         var duplicate = processes.Where(x => x is not null && x.Enabled)
             .GroupBy(x => NormalizeProcessName(x.Name), StringComparer.OrdinalIgnoreCase)

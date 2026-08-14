@@ -23,7 +23,7 @@ public interface IProcmonController
 
 public interface ITargetProcessLauncher
 {
-    Task<int> LaunchAsync(CaptureProfile profile, CancellationToken cancellationToken);
+    Task<LaunchedTarget> LaunchAsync(CaptureProfile profile, CancellationToken cancellationToken);
 }
 
 public interface IElevatedWorkerClient

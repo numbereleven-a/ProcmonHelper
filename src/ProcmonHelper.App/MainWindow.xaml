@@ -10,11 +10,14 @@
     <TextBlock Text="{DynamicResource ProcmonPath}" Style="{StaticResource LabelStyle}"/>
     <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Text="{Binding ProcmonPath,UpdateSourceTrigger=PropertyChanged}"/><Button Grid.Column="1" Content="{DynamicResource Browse}" Command="{Binding BrowseProcmonCommand}" Style="{StaticResource SecondaryButton}"/></Grid>
     <TextBlock Text="{Binding ProcmonStatus}" Foreground="{DynamicResource Accent}" Margin="2,5,0,18"/>
+    <CheckBox Content="{DynamicResource LaunchTarget}" IsChecked="{Binding LaunchTarget}" FontWeight="SemiBold" Margin="2,0,0,14"/>
+    <StackPanel IsEnabled="{Binding LaunchTarget}">
     <TextBlock Text="{DynamicResource TargetPath}" Style="{StaticResource LabelStyle}"/>
     <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Text="{Binding TargetPath,UpdateSourceTrigger=PropertyChanged}"/><Button Grid.Column="1" Content="{DynamicResource Browse}" Command="{Binding BrowseTargetCommand}" Style="{StaticResource SecondaryButton}"/></Grid>
     <Grid Margin="0,14,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="20"/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{DynamicResource Arguments}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding TargetArguments}"/></StackPanel><StackPanel Grid.Column="2"><TextBlock Text="{DynamicResource WorkingDirectory}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding WorkingDirectory}"/></StackPanel></Grid>
     <TextBlock Text="{DynamicResource WorkingDirectoryHelp}" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="2,6,0,0"/>
     <CheckBox Content="{DynamicResource RunElevated}" IsChecked="{Binding RunTargetElevated}" Margin="2,14,0,0"/>
+    </StackPanel>
    </StackPanel></ScrollViewer></TabItem>
 
    <TabItem Header="{DynamicResource FiltersTab}"><StackPanel Margin="4,18,18,12">
@@ -22,16 +25,16 @@
     <Border Style="{StaticResource InfoCard}" Margin="0,16"><TextBlock Text="{DynamicResource FilterNotice}" TextWrapping="Wrap"/></Border>
     <CheckBox Content="{DynamicResource ExcludeProcmon}" IsChecked="{Binding ExcludeProcmon}"/>
     <TextBlock Text="{DynamicResource ExcludeProcmonHelp}" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="24,6,0,16"/>
-    <TextBlock Text="{DynamicResource PmcPath}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding PmcPath}"/>
-    <CheckBox IsChecked="{Binding AutoIncludeTargetProcess}" Margin="0,16,0,0"><TextBlock><Run Text="{DynamicResource AutoIncludeTarget}"/><Run Text=" "/><Run Text="{Binding TargetExecutableName,Mode=OneWay}" FontWeight="SemiBold"/></TextBlock></CheckBox>
+    <TextBlock Text="{DynamicResource PmcPath}" Style="{StaticResource LabelStyle}"/><Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox Text="{Binding PmcPath}"/><Button Grid.Column="1" Content="{DynamicResource Browse}" Command="{Binding BrowsePmcCommand}" Style="{StaticResource SecondaryButton}"/></Grid>
+    <CheckBox IsChecked="{Binding AutoIncludeTargetProcess}" IsEnabled="{Binding LaunchTarget}" Margin="0,16,0,0"><TextBlock><Run Text="{DynamicResource AutoIncludeTarget}"/><Run Text=" "/><Run Text="{Binding TargetExecutableName,Mode=OneWay}" FontWeight="SemiBold"/></TextBlock></CheckBox>
     <TextBlock Text="{DynamicResource HelperExcludedNotice}" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="24,6,0,0"/>
     <TextBlock Text="{DynamicResource ProcessNames}" Style="{StaticResource LabelStyle}" Margin="0,16,0,0"/><TextBox Text="{Binding ProcessNames}" AcceptsReturn="True" Height="120" VerticalContentAlignment="Top"/>
    </StackPanel></TabItem>
 
    <TabItem Header="{DynamicResource StopTab}"><StackPanel Margin="4,18,18,12">
-    <CheckBox Content="{DynamicResource StopAfterTarget}" IsChecked="{Binding StopAfterTargetExit}" FontWeight="SemiBold"/>
+    <CheckBox Content="{DynamicResource StopAfterTarget}" IsChecked="{Binding StopAfterTargetExit}" IsEnabled="{Binding LaunchTarget}" FontWeight="SemiBold"/>
     <TextBlock Text="{DynamicResource StopAfterTargetHelp}" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}" Margin="24,6,0,0"/>
-    <Grid Margin="0,18,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="20"/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{DynamicResource ExitDelay}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding ExitDelaySeconds,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}"/></StackPanel><StackPanel Grid.Column="2"><TextBlock Text="{DynamicResource MaxDuration}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding MaximumDurationSeconds,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}"/></StackPanel></Grid>
+    <Grid Margin="0,18,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="20"/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel IsEnabled="{Binding LaunchTarget}"><TextBlock Text="{DynamicResource ExitDelay}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding ExitDelaySeconds,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}"/></StackPanel><StackPanel Grid.Column="2"><TextBlock Text="{DynamicResource MaxDuration}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding MaximumDurationSeconds,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}"/></StackPanel></Grid>
     <Grid Margin="0,16,0,0"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="20"/><ColumnDefinition/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="{DynamicResource MaxSize}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding MaximumSizeGb,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}"/></StackPanel><StackPanel Grid.Column="2"><TextBlock Text="{DynamicResource FreeReserve}" Style="{StaticResource LabelStyle}"/><TextBox Text="{Binding MinimumFreeGb,UpdateSourceTrigger=PropertyChanged,ValidatesOnExceptions=True}"/></StackPanel></Grid>
    </StackPanel></TabItem>
 

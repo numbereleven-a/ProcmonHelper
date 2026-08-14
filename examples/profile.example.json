@@ -1,8 +1,9 @@
 {
-  "SchemaVersion": 2,
+  "SchemaVersion": 3,
   "Name": "Example",
   "Language": 0,
   "ProcmonPath": "",
+  "LaunchTarget": true,
   "TargetPath": "",
   "TargetArguments": "",
   "WorkingDirectory": "",
@@ -20,13 +21,9 @@
   "Formats": 1,
   "LocalDirectory": "",
   "DestinationDirectory": "",
-  "DestinationIsNetwork": false,
   "FileNameTemplate": "{AppName}_{ComputerName}_{DateTime}",
   "OverwriteExisting": false,
-  "DeleteLocalAfterCopy": false,
-  "Topmost": false,
   "AutoIncludeTargetProcess": true,
-  "ExcludeHelper": true,
   "ExcludeProcmon": true,
-  "MinimizeToTray": false
+  "Topmost": false
 }

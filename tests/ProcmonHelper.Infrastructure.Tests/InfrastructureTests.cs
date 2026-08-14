@@ -63,24 +63,52 @@ public sealed class StorageTests : IDisposable
         Assert.Single(loaded); Assert.Equal("test.exe",loaded[0].Processes[0].Name);
     }
     [Fact]
+    public void DiskSpaceIsAvailableForExistingDirectory()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        Assert.True(new DiskSpaceService().GetFreeBytes(Path.GetTempPath()) > 0);
+    }
+    [Fact]
+    public void ConfiguredUncDirectorySupportsFreeSpaceCheck()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        var path = Environment.GetEnvironmentVariable("PROCMONHELPER_UNC_TEST_PATH");
+        if (string.IsNullOrWhiteSpace(path)) return;
+        Assert.StartsWith(@"\\", path, StringComparison.Ordinal);
+        Assert.True(Directory.Exists(path), $"Configured UNC test directory is unavailable: {path}");
+        Assert.True(new DiskSpaceService().GetFreeBytes(path) > 0);
+    }
+    [Fact]
     public async Task VersionOneProfileEnablesNewProcmonExclusion()
     {
         var paths = new StoragePathResolver(_root);
         var path = Path.Combine(_root, "old-profile.json");
         await File.WriteAllTextAsync(path, """{"SchemaVersion":1,"Name":"Old","ExcludeProcmon":false,"Processes":[],"Stop":{}}""");
         var loaded = await new JsonProfileRepository(paths).ImportAsync(path, CancellationToken.None);
-        Assert.Equal(2, loaded.SchemaVersion);
+        Assert.Equal(3, loaded.SchemaVersion);
         Assert.True(loaded.ExcludeProcmon);
+        Assert.True(loaded.LaunchTarget);
     }
     [Fact]
-    public async Task VersionTwoProfilePreservesDisabledProcmonExclusion()
+    public async Task CurrentProfilePreservesDisabledProcmonExclusion()
     {
         var paths = new StoragePathResolver(_root);
         var repository = new JsonProfileRepository(paths);
         await repository.SaveAsync(new CaptureProfile { Name = "Disabled", ExcludeProcmon = false }, CancellationToken.None);
         var loaded = Assert.Single(await repository.LoadAllAsync(CancellationToken.None));
-        Assert.Equal(2, loaded.SchemaVersion);
+        Assert.Equal(3, loaded.SchemaVersion);
         Assert.False(loaded.ExcludeProcmon);
+        Assert.True(loaded.LaunchTarget);
+    }
+    [Fact]
+    public async Task VersionTwoProfileKeepsTargetLaunchEnabled()
+    {
+        var paths = new StoragePathResolver(_root);
+        var path = Path.Combine(_root, "version-two-profile.json");
+        await File.WriteAllTextAsync(path, """{"SchemaVersion":2,"Name":"Old","ExcludeProcmon":true,"Processes":[],"Stop":{}}""");
+        var loaded = await new JsonProfileRepository(paths).ImportAsync(path, CancellationToken.None);
+        Assert.Equal(3, loaded.SchemaVersion);
+        Assert.True(loaded.LaunchTarget);
     }
     [Fact]
     public async Task ProfileRenameKeepsStableFileAndPreservesSettings()
@@ -168,6 +196,19 @@ public sealed class ApplicationSettingsTests : IDisposable
         var viewModel = new MainWindowViewModel(new UnusedSessionManager(), new JsonProfileRepository(paths), paths);
 
         Assert.True(viewModel.LoadLastUsedProfile);
+    }
+
+    [Fact]
+    public void MonitoringOnlyDisablesTargetExitStop()
+    {
+        var paths = new StoragePathResolver(_root);
+        var viewModel = new MainWindowViewModel(new UnusedSessionManager(), new JsonProfileRepository(paths), paths)
+        {
+            StopAfterTargetExit = true,
+            LaunchTarget = false
+        };
+
+        Assert.False(viewModel.StopAfterTargetExit);
     }
 
     [Fact]
@@ -305,6 +346,31 @@ public sealed class SessionManagerTests : IDisposable
         Assert.Single(result.Files.Where(path => Path.GetExtension(path).Equals(".pml", StringComparison.OrdinalIgnoreCase)));
     }
 
+    [Fact]
+    public async Task DestinationCopyPreservesLocalNamesAcrossFormats()
+    {
+        Directory.CreateDirectory(_root);
+        var source = Environment.ProcessPath!;
+        var procmon = Path.Combine(_root, "Procmon64.exe");
+        var target = Path.Combine(_root, "target.exe");
+        File.Copy(source, procmon); File.Copy(source, target);
+        var paths = new StoragePathResolver(Path.Combine(_root, "app"));
+        var manager = new SessionManager(new ProfileValidator(), paths, new JsonSessionRepository(paths, new SystemClock()),
+            new CompletingWorker(), new WritingExportProcmonController(), new FixedCapabilities(), new FileTransferService(), new FixedDisk(), new SystemClock());
+        var destination = Path.Combine(_root, "destination");
+        var profile = new CaptureProfile
+        {
+            ProcmonPath = procmon, TargetPath = target, WorkingDirectory = _root,
+            LocalDirectory = Path.Combine(_root, "captures"), DestinationDirectory = destination,
+            FileNameTemplate = "capture", Formats = OutputFormats.Pml | OutputFormats.Csv | OutputFormats.Xml,
+            Stop = new StopOptions { StopAfterTargetExit = false, MaximumDuration = TimeSpan.FromSeconds(1), MaximumPmlBytes = 1024 * 1024, MinimumFreeBytes = 64 * 1024 * 1024 }
+        };
+
+        await manager.CaptureAsync(profile, null, CancellationToken.None);
+
+        Assert.Equal(new[] { "capture.csv", "capture.pml", "capture.xml" }, Directory.GetFiles(destination).Select(Path.GetFileName).Order().ToArray());
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);
@@ -340,10 +406,16 @@ public sealed class SessionManagerTests : IDisposable
             throw new InvalidOperationException("synthetic export failure");
     }
 
+    private sealed class WritingExportProcmonController : NoOpProcmonController
+    {
+        public override Task ExportAsync(string executablePath, string pmlPath, string destinationPath, bool applyFilter, CancellationToken cancellationToken) =>
+            File.WriteAllTextAsync(destinationPath, "export", cancellationToken);
+    }
+
     private sealed class FixedCapabilities : IProcmonCapabilityDetector
     {
         public Task<ProcmonCapabilities> DetectAsync(string executablePath, CancellationToken cancellationToken) =>
-            Task.FromResult(new ProcmonCapabilities(new Version(4, 1), new HashSet<string>(), true, true, true, true));
+            Task.FromResult(new ProcmonCapabilities(new Version(4, 1)));
     }
 
     private sealed class FixedDisk : IDiskSpaceService { public long GetFreeBytes(string path) => long.MaxValue; }

@@ -44,6 +44,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         _statusMessage = LocalizationService.Get("Ready"); _stateText = CaptureState.Idle.ToString();
         BrowseProcmonCommand = new RelayCommand(() => ProcmonPath = PickExecutable(ProcmonPath, "Procmon64.exe") ?? ProcmonPath);
         BrowseTargetCommand = new RelayCommand(() => { var path = PickExecutable(TargetPath, "*.exe"); if (path is not null) { TargetPath = path; WorkingDirectory = Path.GetDirectoryName(path) ?? string.Empty; } });
+        BrowsePmcCommand = new RelayCommand(() => PmcPath = PickFile(PmcPath, "Process Monitor configuration (*.pmc)|*.pmc|All files|*.*") ?? PmcPath);
         BrowseLocalCommand = new RelayCommand(() => LocalDirectory = PickFolder(LocalDirectory) ?? LocalDirectory);
         BrowseDestinationCommand = new RelayCommand(() => DestinationDirectory = PickFolder(DestinationDirectory) ?? DestinationDirectory);
         StartCommand = new AsyncRelayCommand(StartAsync, () => !IsRunning, HandleCommandError);
@@ -70,10 +71,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
     public string DataRoot { get; }
-    public string ApplicationVersion { get; } = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(2) ?? "1.2";
+    public string ApplicationVersion { get; } = Assembly.GetEntryAssembly()?.GetName().Version?.ToString(2) ?? "1.3";
     public ObservableCollection<CaptureProfile> Profiles { get; } = [];
     public RelayCommand BrowseProcmonCommand { get; }
     public RelayCommand BrowseTargetCommand { get; }
+    public RelayCommand BrowsePmcCommand { get; }
     public RelayCommand BrowseLocalCommand { get; }
     public RelayCommand BrowseDestinationCommand { get; }
     public AsyncRelayCommand StartCommand { get; }
@@ -92,6 +94,16 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     public string TargetArguments { get => Get(string.Empty); set => Set(value); }
     public string WorkingDirectory { get => Get(string.Empty); set => Set(value); }
     public bool RunTargetElevated { get => Get(false); set => Set(value); }
+    public bool LaunchTarget
+    {
+        get => Get(true);
+        set
+        {
+            if (LaunchTarget == value) return;
+            Set(value);
+            if (!value) StopAfterTargetExit = false;
+        }
+    }
     public FilterMode FilterMode { get => Get(FilterMode.AllEvents); set => Set(value); }
     public string PmcPath { get => Get(string.Empty); set => Set(value); }
     public string ProcessNames { get => Get(string.Empty); set => Set(value); }
@@ -145,8 +157,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         {
             _currentState = p.State;
             if (p.State == CaptureState.Capturing && CaptureTimeText == "—") CaptureTimeText = DateTime.Now.ToString("HH:mm:ss", CultureInfo.CurrentCulture);
-            StateText = $"{p.State} · {p.Elapsed:hh\\:mm\\:ss} · {FormatSize(p.PmlBytes)}";
-            StatusMessage = p.Message;
+            StateText = $"{LocalizedState(p.State)} · {p.Elapsed:hh\\:mm\\:ss} · {FormatSize(p.PmlBytes)}";
+            StatusMessage = LocalizedState(p.State);
             if (p.TransferPercent is { } transferPercent) { IsProgressIndeterminate = false; ProgressPercent = transferPercent; }
             else if (p.State == CaptureState.Capturing)
             {
@@ -158,34 +170,52 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
             }
         });
             var result = await _sessions.CaptureAsync(profile, progress, _captureCts.Token, _postProcessCts.Token);
-            StateText = result.Session.State.ToString(); StatusMessage = LocalizationService.Get("CaptureCompleted"); ProgressPercent = 100;
+            StateText = LocalizedState(result.Session.State); StatusMessage = LocalizationService.Get("CaptureCompleted"); ProgressPercent = 100;
             var savedPml = result.Files.FirstOrDefault(x => string.Equals(Path.GetExtension(x), ".pml", StringComparison.OrdinalIgnoreCase));
             if (savedPml is not null) SavePathText = savedPml;
             var outputDirectory = savedPml is null ? profile.LocalDirectory : Path.GetDirectoryName(savedPml);
             if (OpenFolderAfterCompletion && Directory.Exists(outputDirectory))
                 Process.Start(new ProcessStartInfo(outputDirectory!) { UseShellExecute = true });
         }
-        catch (Exception ex) { StateText = CaptureState.Failed.ToString(); StatusMessage = $"{LocalizationService.Get("CaptureFailed")}: {ex.Message}"; }
+        catch (Exception ex) { StateText = LocalizedState(CaptureState.Failed); StatusMessage = $"{LocalizationService.Get("CaptureFailed")}: {ex.Message}"; }
         finally { FinishTimeText = DateTime.Now.ToString("HH:mm:ss", CultureInfo.CurrentCulture); IsProgressIndeterminate = false; _captureCts.Dispose(); _captureCts = null; _postProcessCts.Dispose(); _postProcessCts = null; _currentState = CaptureState.Idle; IsRunning = false; }
     }
 
     private CaptureProfile BuildProfile()
     {
+        var exitDelay = ValidateNumber(ExitDelaySeconds ?? 0, 0, 86_400, "Target-exit delay");
+        TimeSpan? maximumDuration = MaximumDurationSeconds is { } seconds
+            ? TimeSpan.FromSeconds(ValidateNumber(seconds, 0.001, 31 * 24 * 60 * 60, "Maximum duration")) : null;
+        long? maximumPmlBytes = MaximumSizeGb is { } size
+            ? ToBytes(ValidateNumber(size, 1d / 1024, 8192, "Maximum PML size"), "Maximum PML size") : null;
+        var minimumFreeBytes = ToBytes(ValidateNumber(MinimumFreeGb, 0.0625, 8192, "Free-space reserve"), "Free-space reserve");
         var formats = OutputFormats.Pml | (SaveCsv ? OutputFormats.Csv : 0) | (SaveXml ? OutputFormats.Xml : 0);
         var processNames = ProcessNames.Split(['\r','\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
-        if (AutoIncludeTargetProcess && !string.IsNullOrWhiteSpace(TargetPath)) processNames.Add(Path.GetFileName(TargetPath));
+        if (LaunchTarget && AutoIncludeTargetProcess && !string.IsNullOrWhiteSpace(TargetPath)) processNames.Add(Path.GetFileName(TargetPath));
         return new CaptureProfile
         {
-            Name = ProfileName, Language = Language, ProcmonPath = ProcmonPath, TargetPath = TargetPath,
+            Name = ProfileName, Language = Language, ProcmonPath = ProcmonPath, LaunchTarget = LaunchTarget, TargetPath = TargetPath,
             TargetArguments = TargetArguments, WorkingDirectory = WorkingDirectory, RunTargetElevated = RunTargetElevated,
             FilterMode = FilterMode, PmcPath = PmcPath,
             Processes = processNames.Distinct(StringComparer.OrdinalIgnoreCase).Select(x => new TrackedProcess(x)).ToArray(),
-            AutoIncludeTargetProcess = AutoIncludeTargetProcess, ExcludeHelper = true, ExcludeProcmon = ExcludeProcmon,
-            Stop = new StopOptions { StopAfterTargetExit = StopAfterTargetExit, TargetExitDelay = TimeSpan.FromSeconds(ExitDelaySeconds ?? 0), MaximumDuration = MaximumDurationSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : null, MaximumPmlBytes = MaximumSizeGb is { } size ? checked((long)(size * 1024 * 1024 * 1024)) : null, MinimumFreeBytes = checked((long)(MinimumFreeGb * 1024 * 1024 * 1024)) },
+            AutoIncludeTargetProcess = AutoIncludeTargetProcess, ExcludeProcmon = ExcludeProcmon,
+            Stop = new StopOptions { StopAfterTargetExit = LaunchTarget && StopAfterTargetExit, TargetExitDelay = TimeSpan.FromSeconds(exitDelay), MaximumDuration = maximumDuration, MaximumPmlBytes = maximumPmlBytes, MinimumFreeBytes = minimumFreeBytes },
             Formats = formats, LocalDirectory = LocalDirectory, DestinationDirectory = DestinationDirectory,
-            DestinationIsNetwork = DestinationDirectory.StartsWith("\\\\", StringComparison.Ordinal) || DestinationDirectory.StartsWith("//", StringComparison.Ordinal), FileNameTemplate = FileNameTemplate,
-            OverwriteExisting = OverwriteExisting, Topmost = Topmost, MinimizeToTray = false
+            FileNameTemplate = FileNameTemplate, OverwriteExisting = OverwriteExisting, Topmost = Topmost
         };
+    }
+
+    private static double ValidateNumber(double value, double minimum, double maximum, string field)
+    {
+        if (!double.IsFinite(value) || value < minimum || value > maximum)
+            throw new InvalidOperationException($"{field} must be between {minimum:0.###} and {maximum:0.###}.");
+        return value;
+    }
+
+    private static long ToBytes(double gigabytes, string field)
+    {
+        try { return checked((long)(gigabytes * 1024 * 1024 * 1024)); }
+        catch (OverflowException) { throw new InvalidOperationException($"{field} is too large."); }
     }
 
     private void UpdateCaptureSummary(CaptureProfile profile)
@@ -278,6 +308,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ProfileName = p.Name;
         Language = p.Language;
         ProcmonPath = p.ProcmonPath;
+        LaunchTarget = p.LaunchTarget;
         TargetPath = p.TargetPath;
         TargetArguments = p.TargetArguments;
         WorkingDirectory = p.WorkingDirectory;
@@ -289,7 +320,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         ProcessNames = string.Join(Environment.NewLine, p.Processes
             .Where(x => !p.AutoIncludeTargetProcess || !string.Equals(x.Name, Path.GetFileName(p.TargetPath), StringComparison.OrdinalIgnoreCase))
             .Select(x => x.Name));
-        StopAfterTargetExit = p.Stop.StopAfterTargetExit;
+        StopAfterTargetExit = p.LaunchTarget && p.Stop.StopAfterTargetExit;
         ExitDelaySeconds = p.Stop.TargetExitDelay.TotalSeconds;
         MaximumDurationSeconds = p.Stop.MaximumDuration?.TotalSeconds;
         MaximumSizeGb = p.Stop.MaximumPmlBytes is { } maximumBytes ? maximumBytes / (1024d * 1024 * 1024) : null;
@@ -306,6 +337,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     private void ResetSettings()
     {
         ProcmonPath = string.Empty;
+        LaunchTarget = true;
         TargetPath = string.Empty;
         TargetArguments = string.Empty;
         WorkingDirectory = string.Empty;
@@ -343,6 +375,7 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     }
 
     private static string? PickExecutable(string current, string filterName) { var dialog = new Microsoft.Win32.OpenFileDialog { Filter = $"Executables ({filterName})|{filterName}|All files|*.*", FileName = current }; return dialog.ShowDialog() == true ? dialog.FileName : null; }
+    private static string? PickFile(string current, string filter) { var dialog = new Microsoft.Win32.OpenFileDialog { Filter = filter, FileName = current }; return dialog.ShowDialog() == true ? dialog.FileName : null; }
     private static string? PickFolder(string current) { using var dialog = new Forms.FolderBrowserDialog { InitialDirectory = Directory.Exists(current) ? current : string.Empty, ShowNewFolderButton = true }; return dialog.ShowDialog() == Forms.DialogResult.OK ? dialog.SelectedPath : null; }
     private void OpenOutputFolder()
     {
@@ -358,10 +391,11 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
         catch (Exception ex) { StatusMessage = ex.Message; }
     }
     private static string FormatSize(long value) => value >= 1024*1024*1024 ? $"{value/(1024d*1024*1024):0.00} GB" : value >= 1024*1024 ? $"{value/(1024d*1024):0.0} MB" : $"{value/1024d:0} KB";
+    private static string LocalizedState(CaptureState state) => LocalizationService.Get($"State{state}");
     private void HandleCommandError(Exception ex) => StatusMessage = ex.Message;
     private void RefreshLocalizedValues()
     {
-        ProcmonStatus = File.Exists(ProcmonPath) ? "Procmon64.exe" : LocalizationService.Get("NoProcmon");
+        ProcmonStatus = File.Exists(ProcmonPath) && string.Equals(Path.GetFileName(ProcmonPath), "Procmon64.exe", StringComparison.OrdinalIgnoreCase) ? "Procmon64.exe" : LocalizationService.Get("NoProcmon");
         OnPropertyChanged(nameof(TargetExecutableName));
         if (_summaryProfile is not null) UpdateCaptureSummary(_summaryProfile);
         if (!IsRunning) StatusMessage = LocalizationService.Get("Ready");
@@ -427,7 +461,8 @@ public sealed class MainWindowViewModel : INotifyPropertyChanged
     {
         _captureCts?.Cancel();
         _postProcessCts?.Cancel();
-        while (IsRunning) await Task.Delay(50);
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(35);
+        while (IsRunning && DateTime.UtcNow < deadline) await Task.Delay(50);
     }
 
     private readonly Dictionary<string, object?> _values = [];

@@ -68,6 +68,7 @@ public sealed class ElevatedWorkerHost(IProcmonController procmon, IDiskSpaceSer
         StartCaptureCommand? start = null;
         int? procmonPid = null;
         var procmonStarted = false;
+        Process? targetProcess = null;
         var reason = StopReason.None;
         string? error = null;
         try
@@ -97,6 +98,7 @@ public sealed class ElevatedWorkerHost(IProcmonController procmon, IDiskSpaceSer
             procmonStarted = true;
             await PipeJson.WriteAsync(writer, new WorkerEvent("started", start.SessionId, "Process Monitor started.", procmonPid), cancellationToken);
             await procmon.WaitUntilReadyAsync(effectiveProfile.ProcmonPath, TimeSpan.FromSeconds(30), cancellationToken);
+            if (!start.Profile.LaunchTarget) startedAt = clock.Now;
             await PipeJson.WriteAsync(writer, new WorkerEvent("ready", start.SessionId, "Process Monitor is ready.", procmonPid), cancellationToken);
             var readTask = PipeJson.ReadAsync<WorkerCommand>(reader, cancellationToken);
             while (reason == StopReason.None)
@@ -113,6 +115,18 @@ public sealed class ElevatedWorkerHost(IProcmonController procmon, IDiskSpaceSer
                     {
                         case SetTargetPidCommand target:
                             targetPid = target.TargetPid;
+                            targetProcess?.Dispose();
+                            try
+                            {
+                                targetProcess = Process.GetProcessById(target.TargetPid);
+                                if (Math.Abs((targetProcess.StartTime.ToUniversalTime() - target.TargetStartedAt.UtcDateTime).TotalSeconds) > 0.001)
+                                {
+                                    targetProcess.Dispose();
+                                    targetProcess = null;
+                                    targetExitedAt ??= clock.Now;
+                                }
+                            }
+                            catch (ArgumentException) { targetProcess = null; targetExitedAt ??= clock.Now; }
                             startedAt ??= clock.Now;
                             break;
                         case StopCaptureCommand stop: reason = stop.Reason; break;
@@ -145,13 +159,19 @@ public sealed class ElevatedWorkerHost(IProcmonController procmon, IDiskSpaceSer
                     error = $"Capture storage could not be checked: {ex.Message}";
                     break;
                 }
-                var targetExited = targetPid is { } pid && !IsRunning(pid);
+                var targetExited = targetPid is not null && (targetProcess is null || HasExited(targetProcess));
                 if (targetExited && targetExitedAt is null) targetExitedAt = clock.Now;
                 var elapsed = startedAt is null ? TimeSpan.Zero : clock.Now - startedAt.Value;
                 reason = reason == StopReason.None
                     ? evaluator.Evaluate(start.Profile.Stop, elapsed, pmlBytes, freeBytes, targetExited, targetExitedAt is null ? null : clock.Now - targetExitedAt)
                     : reason;
-                if (progressWrite is null || progressWrite.IsCompleted)
+                if (progressWrite is { IsCompleted: true })
+                {
+                    try { await progressWrite; }
+                    catch (IOException) { reason = StopReason.ConnectionLost; break; }
+                    progressWrite = null;
+                }
+                if (progressWrite is null)
                     progressWrite = PipeJson.WriteAsync(writer, new WorkerEvent("progress", start.SessionId, startedAt is null ? "Waiting for target application." : "Capturing", procmonPid, reason, pmlBytes, freeBytes), cancellationToken);
             }
 
@@ -161,7 +181,8 @@ public sealed class ElevatedWorkerHost(IProcmonController procmon, IDiskSpaceSer
                 catch (TimeoutException) { reason = StopReason.ConnectionLost; }
             }
         }
-        catch (IOException) { reason = StopReason.ConnectionLost; }
+        catch (IOException ex) when (IsPipeDisconnect(ex)) { reason = StopReason.ConnectionLost; }
+        catch (IOException ex) { reason = StopReason.Error; error = $"Capture I/O failed: {ex.Message}"; }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { reason = StopReason.ConnectionLost; }
         catch (Exception ex)
         {
@@ -170,10 +191,12 @@ public sealed class ElevatedWorkerHost(IProcmonController procmon, IDiskSpaceSer
         }
         finally
         {
+            targetProcess?.Dispose();
             if (procmonStarted && start is not null)
             {
-                try { await PipeJson.WriteAsync(writer, new WorkerEvent("stopping", expectedSessionId, "Stopping Process Monitor.", procmonPid, reason), CancellationToken.None); }
-                catch (IOException) { }
+                using var notification = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                try { await PipeJson.WriteAsync(writer, new WorkerEvent("stopping", expectedSessionId, "Stopping Process Monitor.", procmonPid, reason), notification.Token); }
+                catch (Exception ex) when (ex is IOException or OperationCanceledException) { }
                 using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(30));
                 try { await procmon.StopAsync(start.Profile.ProcmonPath, TimeSpan.FromSeconds(20), cleanup.Token); }
                 catch (Exception ex)
@@ -186,8 +209,9 @@ public sealed class ElevatedWorkerHost(IProcmonController procmon, IDiskSpaceSer
 
         var kind = error is null ? "stopped" : "error";
         var message = error ?? "Process Monitor stopped.";
-        try { await PipeJson.WriteAsync(writer, new WorkerEvent(kind, expectedSessionId, message, procmonPid, reason), CancellationToken.None); }
-        catch (IOException) { }
+        using var finalNotification = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        try { await PipeJson.WriteAsync(writer, new WorkerEvent(kind, expectedSessionId, message, procmonPid, reason), finalNotification.Token); }
+        catch (Exception ex) when (ex is IOException or OperationCanceledException) { }
         return error is null ? 0 : 1;
     }
 
@@ -204,6 +228,12 @@ public sealed class ElevatedWorkerHost(IProcmonController procmon, IDiskSpaceSer
         catch (ArgumentException) { return false; }
         catch (InvalidOperationException) { return false; }
     }
+    private static bool HasExited(Process process)
+    {
+        try { return process.HasExited; }
+        catch (InvalidOperationException) { return true; }
+    }
+    private static bool IsPipeDisconnect(IOException exception) => (exception.HResult & 0xffff) is 109 or 232 or 233;
     private static bool IsProcmonRunning()
     {
         var processes = Process.GetProcessesByName("Procmon64").Concat(Process.GetProcessesByName("Procmon")).ToArray();
@@ -292,13 +322,21 @@ public sealed class ElevatedWorkerClient(ITargetProcessLauncher targetLauncher, 
         }
 
         progress?.Report(new(CaptureState.WaitingForProcmon, evt.Message, TimeSpan.Zero, 0, 0, null));
-        progress?.Report(new(CaptureState.LaunchingTarget, "Launching target application.", TimeSpan.Zero, 0, 0, null));
         using var writeGate = new SemaphoreSlim(1, 1);
-        async Task SendAsync(WorkerCommand command)
+        async Task SendAsync(WorkerCommand command, CancellationToken token = default)
         {
-            await writeGate.WaitAsync(CancellationToken.None);
-            try { await PipeJson.WriteAsync(writer, command, CancellationToken.None); }
-            finally { writeGate.Release(); }
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+            timeout.CancelAfter(TimeSpan.FromSeconds(5));
+            try
+            {
+                await writeGate.WaitAsync(timeout.Token);
+                try { await PipeJson.WriteAsync(writer, command, timeout.Token); }
+                finally { writeGate.Release(); }
+            }
+            catch (OperationCanceledException) when (!token.IsCancellationRequested)
+            {
+                throw new TimeoutException("Elevated-worker IPC write timed out.");
+            }
         }
         using var heartbeatCts = new CancellationTokenSource();
         var heartbeat = Task.Run(async () =>
@@ -306,24 +344,31 @@ public sealed class ElevatedWorkerClient(ITargetProcessLauncher targetLauncher, 
             while (!heartbeatCts.IsCancellationRequested)
             {
                 await Task.Delay(1000, heartbeatCts.Token);
-                await SendAsync(new HeartbeatCommand(sessionId));
+                await SendAsync(new HeartbeatCommand(sessionId), heartbeatCts.Token);
             }
         }, heartbeatCts.Token);
-        int targetPid;
+        int? targetPid = null;
         try
         {
-        try
+        if (profile.LaunchTarget)
         {
-            targetPid = await Task.Run(() => targetLauncher.LaunchAsync(profile, cancellationToken), CancellationToken.None);
-            await SendAsync(new SetTargetPidCommand(sessionId, targetPid));
-        }
-        catch
-        {
-            try { await SendAsync(new StopCaptureCommand(sessionId, StopReason.Error)); } catch (IOException) { }
-            throw;
+            progress?.Report(new(CaptureState.LaunchingTarget, "Launching target application.", TimeSpan.Zero, 0, 0, null));
+            try
+            {
+                var launchedTarget = await Task.Run(() => targetLauncher.LaunchAsync(profile, cancellationToken), CancellationToken.None);
+                targetPid = launchedTarget.ProcessId;
+                await SendAsync(new SetTargetPidCommand(sessionId, targetPid.Value, launchedTarget.StartedAt), CancellationToken.None);
+            }
+            catch
+            {
+                try { await SendAsync(new StopCaptureCommand(sessionId, StopReason.Error), CancellationToken.None); }
+                catch (Exception ex) when (ex is IOException or TimeoutException) { }
+                throw;
+            }
         }
         var started = DateTimeOffset.Now;
-        progress?.Report(new(CaptureState.Capturing, "Capturing", TimeSpan.Zero, 0, 0, targetPid));
+        var captureMessage = profile.LaunchTarget ? "Capturing" : "Capturing without launching a target application.";
+        progress?.Report(new(CaptureState.Capturing, captureMessage, TimeSpan.Zero, 0, 0, targetPid));
         var stopSent = false;
         var read = PipeJson.ReadAsync<WorkerEvent>(reader, CancellationToken.None);
         while (true)
@@ -331,8 +376,8 @@ public sealed class ElevatedWorkerClient(ITargetProcessLauncher targetLauncher, 
             if (cancellationToken.IsCancellationRequested && !stopSent)
             {
                 stopSent = true;
-                    try { await SendAsync(new StopCaptureCommand(sessionId, StopReason.Manual)); }
-                catch (IOException)
+                    try { await SendAsync(new StopCaptureCommand(sessionId, StopReason.Manual), CancellationToken.None); }
+                catch (Exception ex) when (ex is IOException or TimeoutException)
                 {
                     // The worker may already be finalizing for another reason. Consume its queued
                     // stopping/stopped event instead of replacing a valid capture with Pipe is broken.
@@ -347,24 +392,25 @@ public sealed class ElevatedWorkerClient(ITargetProcessLauncher targetLauncher, 
             }
             heartbeatDelay.Cancel();
             evt = await read ?? throw new IOException("Elevated worker disconnected.");
-            read = PipeJson.ReadAsync<WorkerEvent>(reader, CancellationToken.None);
             if (evt.Kind == "error") throw new InvalidOperationException(evt.Message);
+            if (evt.Kind == "stopped")
+                return new(targetPid, evt.StopReason, started, evt.ProcmonPid);
             if (evt.Kind == "stopping")
             {
                 progress?.Report(new(CaptureState.StoppingProcmon, evt.Message, DateTimeOffset.Now - started, evt.PmlBytes, evt.FreeBytes, targetPid, evt.StopReason));
-                continue;
             }
-            if (evt.Kind == "stopped")
-                return new(targetPid, evt.StopReason, started, evt.ProcmonPid);
-            progress?.Report(new(CaptureState.Capturing, evt.Message, DateTimeOffset.Now - started, evt.PmlBytes, evt.FreeBytes, targetPid, evt.StopReason));
+            else
+                progress?.Report(new(CaptureState.Capturing, evt.Message, DateTimeOffset.Now - started, evt.PmlBytes, evt.FreeBytes, targetPid, evt.StopReason));
+            read = PipeJson.ReadAsync<WorkerEvent>(reader, CancellationToken.None);
         }
         }
         finally
         {
             heartbeatCts.Cancel();
-            try { await heartbeat; }
+            try { await heartbeat.WaitAsync(TimeSpan.FromSeconds(2), CancellationToken.None); }
             catch (OperationCanceledException) { }
             catch (IOException) { }
+            catch (TimeoutException) { }
         }
     }
 }

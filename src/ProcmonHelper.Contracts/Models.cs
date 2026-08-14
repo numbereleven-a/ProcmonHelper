@@ -36,10 +36,11 @@ public sealed record StopOptions
 
 public sealed record CaptureProfile
 {
-    public int SchemaVersion { get; init; } = 2;
+    public int SchemaVersion { get; init; } = 3;
     public string Name { get; init; } = "Default";
     public LanguagePreference Language { get; init; } = LanguagePreference.Automatic;
     public string ProcmonPath { get; init; } = string.Empty;
+    public bool LaunchTarget { get; init; } = true;
     public string TargetPath { get; init; } = string.Empty;
     public string TargetArguments { get; init; } = string.Empty;
     public string WorkingDirectory { get; init; } = string.Empty;
@@ -48,18 +49,14 @@ public sealed record CaptureProfile
     public string PmcPath { get; init; } = string.Empty;
     public IReadOnlyList<TrackedProcess> Processes { get; init; } = [];
     public bool AutoIncludeTargetProcess { get; init; } = true;
-    public bool ExcludeHelper { get; init; } = true;
     public bool ExcludeProcmon { get; init; } = true;
     public StopOptions Stop { get; init; } = new();
     public OutputFormats Formats { get; init; } = OutputFormats.Pml;
     public string LocalDirectory { get; init; } = string.Empty;
     public string DestinationDirectory { get; init; } = string.Empty;
-    public bool DestinationIsNetwork { get; init; }
     public string FileNameTemplate { get; init; } = "{AppName}_{ComputerName}_{DateTime}";
     public bool OverwriteExisting { get; init; }
-    public bool DeleteLocalAfterCopy { get; init; }
     public bool Topmost { get; init; }
-    public bool MinimizeToTray { get; init; } = true;
 }
 
 public sealed record SessionRecord
@@ -91,15 +88,10 @@ public sealed record CaptureProgress(
     double? TransferPercent = null);
 
 public sealed record CaptureResult(SessionRecord Session, IReadOnlyList<string> Files);
-public sealed record ElevatedCaptureResult(int TargetPid, StopReason Reason, DateTimeOffset CaptureStartedAt, int? ProcmonPid);
+public sealed record ElevatedCaptureResult(int? TargetPid, StopReason Reason, DateTimeOffset CaptureStartedAt, int? ProcmonPid);
+public sealed record LaunchedTarget(int ProcessId, DateTimeOffset StartedAt);
 
-public sealed record ProcmonCapabilities(
-    Version Version,
-    IReadOnlySet<string> Switches,
-    bool SupportsPmc,
-    bool SupportsCsv,
-    bool SupportsXml,
-    bool SupportsSaveApplyFilter);
+public sealed record ProcmonCapabilities(Version Version);
 
 public sealed record FileTransferProgress(long BytesCopied, long TotalBytes)
 {
@@ -116,7 +108,7 @@ public sealed record ValidationIssue(string Field, string Message, bool IsWarnin
 public abstract record WorkerCommand(Guid SessionId);
 
 public sealed record StartCaptureCommand(Guid SessionId, CaptureProfile Profile, string BackingFile) : WorkerCommand(SessionId);
-public sealed record SetTargetPidCommand(Guid SessionId, int TargetPid) : WorkerCommand(SessionId);
+public sealed record SetTargetPidCommand(Guid SessionId, int TargetPid, DateTimeOffset TargetStartedAt) : WorkerCommand(SessionId);
 public sealed record StopCaptureCommand(Guid SessionId, StopReason Reason) : WorkerCommand(SessionId);
 public sealed record HeartbeatCommand(Guid SessionId) : WorkerCommand(SessionId);
 
